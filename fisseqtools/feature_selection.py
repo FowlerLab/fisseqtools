@@ -9,16 +9,29 @@ import numpy as np
 import pandas as pd
 
 
-def get_barcode_count(data_csv_path: os.PathLike) -> Dict[str, int]:
+def get_count(
+    data_csv_path: os.PathLike, key: str = "geno", filter_synonymous: bool = True,
+    filter_wildtype: bool = True,
+) -> Dict[str, int]:
     data_df = pd.read_csv(data_csv_path)
-    return collections.Counter(list(data_df["Barcode"]))
+    
+    if filter_synonymous:
+        data_df = data_df[data_df["Variant_Class"] != "Synonymous"]
+    
+    if filter_wildtype:
+        data_df = data_df[data_df["Variant_Class"] != "WT"]
+
+    return collections.Counter(list(data_df[key]))
 
 
-def dump_barcode_count(
-    data_csv_path: os.PathLike, count_json_path: os.PathLike, indent: int = 2
+def dump_count(
+    data_csv_path: os.PathLike,
+    count_json_path: os.PathLike,
+    indent: int = 2,
+    **kwargs
 ) -> None:
     with open(count_json_path, "w") as f:
-        json.dump(get_barcode_count(data_csv_path), f, indent=indent)
+        json.dump(get_count(data_csv_path, **kwargs), f, indent=indent)
 
 
 def graph_variant_count_dist(

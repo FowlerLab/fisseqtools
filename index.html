@@ -139,6 +139,72 @@
             However, an algorithm like random forest or logistic regression
             should be able to select out the important features.
           </p>
+          <h2>Repeating Analysis, But With Genotype This Time (Oops)</h2>
+          <p>
+            Turns out the barcodes don't correspond one to one to the genotype
+            as I initially thought, whoops. Therefore, made some slight
+            modifications to <code>fisseqtools.feature_selection</code> and
+            repeated the previous analysis. I also filtered out any wildtype
+            and synonymous genotypes from the analysis this time around.
+          </p>
+          <img
+            src="./results/2024-10-16/geno_variant_counts.png"
+            class="mx-auto w-50 d-block"
+            alt="Varient Count Graph"
+          >
+          <img
+            src="./results/2024-10-16/geno_cum_variant_count.png"
+            class="mx-auto w-50 d-block"
+            alt="Varient Count Graph"
+          >
+          <img
+            src="./results/2024-10-16/geno_cum_cell_count.png"
+            class="mx-auto w-50 d-block"
+            alt="Variant Count Graph"
+          >
+          <table border="1">
+            <thead>
+                <tr>
+                    <th>Cell Count Threshold</th>
+                    <th>Number of Variants</th>
+                    <th>Number of Cells</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>6207</td><td>1</td><td>6207</td></tr>
+                <tr><td>3316</td><td>26</td><td>98747</td></tr>
+                <tr><td>2847</td><td>52</td><td>177338</td></tr>
+                <tr><td>2615</td><td>83</td><td>262752</td></tr>
+                <tr><td>2467</td><td>110</td><td>331035</td></tr>
+                <tr><td>2328</td><td>137</td><td>395527</td></tr>
+                <tr><td>2267</td><td>165</td><td>459930</td></tr>
+                <tr><td>2182</td><td>196</td><td>528687</td></tr>
+                <tr><td>2107</td><td>226</td><td>593029</td></tr>
+                <tr><td>2014</td><td>256</td><td>655130</td></tr>
+                <tr><td>1936</td><td>285</td><td>712106</td></tr>
+                <tr><td>1868</td><td>319</td><td>776747</td></tr>
+                <tr><td>1801</td><td>352</td><td>836951</td></tr>
+                <tr><td>1729</td><td>382</td><td>889836</td></tr>
+                <tr><td>1670</td><td>418</td><td>950931</td></tr>
+                <tr><td>1614</td><td>446</td><td>996831</td></tr>
+                <tr><td>1562</td><td>489</td><td>1065073</td></tr>
+                <tr><td>1514</td><td>519</td><td>1111266</td></tr>
+                <tr><td>1463</td><td>558</td><td>1169295</td></tr>
+                <tr><td>1422</td><td>593</td><td>1219704</td></tr>
+                <tr><td>1368</td><td>627</td><td>1266912</td></tr>
+                <tr><td>1320</td><td>660</td><td>1311228</td></tr>
+                <tr><td>1276</td><td>704</td><td>1368266</td></tr>
+                <tr><td>1233</td><td>742</td><td>1415759</td></tr>
+                <tr><td>1196</td><td>779</td><td>1460715</td></tr>
+            </tbody>
+            <p>
+              In addition to the counts above, there are also 390283 wild
+              type samples in the dataset, which is far more samples than any
+              single non-synonymous variant. From the table above, a
+              cell/sample threshold count of 2000 seems like a reasonable
+              choice.
+            </p>
+          </table>
         </div>
       </div>
     </section>
