@@ -74,15 +74,15 @@ def graph_cum_cell_variant_count(
 
     plt.plot(cum_cell_variant_count[:, 0], cum_cell_variant_count[:, 1])
     plt.title("Variant Count vs. Cell Count Threshold")
-    plt.xlabel("Variant Count")
-    plt.ylabel("Cell Count Threshold")
+    plt.xlabel("Cell Count Threshold")
+    plt.ylabel("Variant Count")
     plt.savefig("cum_variant_count.png", dpi=200)
 
     plt.clf()
     plt.plot(cum_cell_variant_count[:, 0], cum_cell_variant_count[:, 2], color="orange")
     plt.title("Cell Count vs. Cell Count Threshold")
-    plt.xlabel("Cell Count")
-    plt.ylabel("Cell Count Threshold")
+    plt.xlabel("Cell Count Threshold")
+    plt.ylabel("Cell Count")
     plt.savefig("cum_cell_count.png", dpi=200)
 
     if num_sum_rows is not None:
