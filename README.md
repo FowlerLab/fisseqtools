@@ -36,4 +36,4 @@ See the the [python-fire](https://github.com/google/python-fire) and code docume
 
 ## Lab Notebook
 
-Lab Notebook: [https://lilferrit.github.io/fisseqtools/](https://lilferrit.github.io/fisseqtools/)
+Lab Notebook: [https://lilferrit.github.io/fisseqtools/](https://lilferrit.github.io/fisseqtools/results/gstrau2/results.html)

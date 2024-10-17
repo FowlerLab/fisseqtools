@@ -29,7 +29,32 @@
       </a>
     </div>
   </nav>
-  <div class="accordion mt-4 w-75" id= "notebookAccordion">
+  <div class="w-75 mt-4 d-flex flex-row align-items-start">
+    <button type="button" class="btn btn-primary" id="show-all">
+      Expand All
+    </button>
+    <button type="button" class="btn ms-1 btn-primary" id="collapse-all">
+      Collapse All
+    </button>
+    <script>
+      document.getElementById("show-all").addEventListener("click", 
+        function() {
+          document.querySelectorAll(".collapse").forEach(
+            (collapse) => collapse.classList.add("show")
+          )
+        }
+      );
+
+      document.getElementById("collapse-all").addEventListener("click", 
+        function() {
+          document.querySelectorAll(".collapse").forEach(
+            (collapse) => collapse.classList.remove("show")
+          )
+        }
+      );
+    </script>
+  </div>
+  <div class="accordion mt-2 w-75" id="notebookAccordion">
     <section class="accordion-item">
       <div class="accordion-header" id="2024-10-16-heading">
         <h2 class="mb-0">
@@ -67,7 +92,7 @@
             <code>fisseqtools.feature_selection dump_barcode_count</code>.
           </p>
           <img
-            src="./results/2024-10-16/variant_counts.png"
+            src="../2024-10-16/variant_counts.png"
             class="mx-auto w-50 d-block"
             alt="Varient Count Graph"
           >
@@ -80,12 +105,12 @@
             graph_cum_cell_variant_count</code>.
           </p>
           <img
-            src="./results/2024-10-16/cum_variant_count.png"
+            src="../2024-10-16/cum_variant_count.png"
             class="mx-auto w-50 d-block"
-            alt="Varient Count Graph"
+            alt="Variant Count Graph"
           >
           <img
-            src="./results/2024-10-16/cum_cell_count.png"
+            src="../2024-10-16/cum_cell_count.png"
             class="mx-auto w-50 d-block"
             alt="Variant Count Graph"
           >
@@ -150,17 +175,17 @@
             and synonymous genotypes from the analysis this time around.
           </p>
           <img
-            src="./results/2024-10-16/geno_variant_counts.png"
+            src="../2024-10-16/geno_variant_counts.png"
             class="mx-auto w-50 d-block"
             alt="Corrected Variant Count Graph"
           >
           <img
-            src="./results/2024-10-16/geno_cum_variant_count.png"
+            src="../2024-10-16/geno_cum_variant_count.png"
             class="mx-auto w-50 d-block"
             alt="Corrected Variant Count Graph"
           >
           <img
-            src="./results/2024-10-16/geno_cum_cell_count.png"
+            src="../2024-10-16/geno_cum_cell_count.png"
             class="mx-auto w-50 d-block"
             alt="Corrected Variant Count Graph"
           >
