@@ -38,14 +38,13 @@ def get_train_test_split(
 
 
 def test_hyperparams(
-    classifier_type: Type[sklearn.base.BaseEstimator | sklearn.base.ClassifierMixin],
     classifier_hyperparams: Dict[str, Any],
+    classifier_type: Type[sklearn.base.BaseEstimator | sklearn.base.ClassifierMixin],
     xtrain_xtest_ytrain_ytest: Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray],
 ) -> float:
     x_train, x_test, y_train, y_test = xtrain_xtest_ytrain_ytest
     classifier = classifier_type(**classifier_hyperparams).fit(x_train, y_train)
     return classifier.score(x_test, y_test), classifier_hyperparams
-
 
 def successive_halving(
     start_dset_size: int,
@@ -60,7 +59,7 @@ def successive_halving(
     curr_round = 1
 
     with concurrent.futures.ThreadPoolExecutor(num_threads) as executor:
-        while len(curr_hyperparams) > 1:
+        while True:
             wt_df, ms_df = sample_wt_sms(data_df, start_dset_size)
             xtrain_xtest_ytrain_ytest = get_train_test_split(wt_df, ms_df, embeddings)
             test_fun = functools.partial(
@@ -69,17 +68,20 @@ def successive_halving(
                 xtrain_xtest_ytrain_ytest=xtrain_xtest_ytrain_ytest,
             )
 
-            hyperparam_scores = executor.map(test_fun, curr_hyperparams)
+            hyperparam_scores = list(executor.map(test_fun, curr_hyperparams))
             hyperparam_scores.sort(reverse=True)
             results_dict[curr_round] = [
                 params | {"accuracy": accuracy}
                 for accuracy, params in hyperparam_scores
             ]
             
+            if len(curr_hyperparams) <= 1:
+                break
+
             curr_hyperparams = [params for _, params in hyperparam_scores][
                 : len(hyperparam_scores) // 2
             ]
             curr_round += 1
             start_dset_size *= 2
-            
+
     return results_dict
