@@ -2,6 +2,8 @@
 
 import concurrent.futures
 import functools
+import os
+import pickle
 from typing import Any, Dict, List, Tuple, Type
 
 import numpy as np
@@ -91,3 +93,9 @@ def successive_halving(
             start_dset_size *= 2
 
     return results_dict
+
+def search_gradient_boost_hyperparams(
+    data_df_path: os.PathLike,
+    embeddings_pkl_path: os.PathLike,
+    results_path: os.PathLike,
+)
