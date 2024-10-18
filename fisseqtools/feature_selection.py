@@ -10,14 +10,16 @@ import pandas as pd
 
 
 def get_count(
-    data_csv_path: os.PathLike, key: str = "geno", filter_synonymous: bool = True,
+    data_csv_path: os.PathLike,
+    key: str = "geno",
+    filter_synonymous: bool = True,
     filter_wildtype: bool = True,
 ) -> Dict[str, int]:
     data_df = pd.read_csv(data_csv_path)
-    
+
     if filter_synonymous:
         data_df = data_df[data_df["Variant_Class"] != "Synonymous"]
-    
+
     if filter_wildtype:
         data_df = data_df[data_df["Variant_Class"] != "WT"]
 
@@ -25,10 +27,7 @@ def get_count(
 
 
 def dump_count(
-    data_csv_path: os.PathLike,
-    count_json_path: os.PathLike,
-    indent: int = 2,
-    **kwargs
+    data_csv_path: os.PathLike, count_json_path: os.PathLike, indent: int = 2, **kwargs
 ) -> None:
     with open(count_json_path, "w") as f:
         json.dump(get_count(data_csv_path, **kwargs), f, indent=indent)
