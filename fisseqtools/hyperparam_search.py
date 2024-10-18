@@ -10,10 +10,15 @@ import sklearn.base
 import sklearn.model_selection
 
 
-def sample_wt_sms(data_df: pd.DataFrame, n: int) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Sample n wild type and single missense rows of data_df"""
-    wt_indices = data_df[data_df["Variant_Class"] == "WT"].index.to_numpy()
-    ms_indices = data_df[data_df["Variant_Class"] == "Single Missense"].index.to_numpy()
+def sample_wt_sms(
+    data_df: pd.DataFrame,
+    n: int,
+    wildtype_class: str = "WT",
+    mutant_classes: List[str] = ["Single Missense", "Multiple", "Nonsense"],
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Sample n wild type and n mutant rows of data_df"""
+    wt_indices = data_df[data_df["Variant_Class"] == wildtype_class].index.to_numpy()
+    ms_indices = data_df[data_df["Variant_Class"].isin(mutant_classes)].index.to_numpy()
     select_wt_indices = np.random.choice(wt_indices, size=n, replace=False)
     select_ms_indices = np.random.choice(ms_indices, size=n, replace=False)
 
@@ -46,6 +51,7 @@ def test_hyperparams(
     classifier = classifier_type(**classifier_hyperparams).fit(x_train, y_train)
     return classifier.score(x_test, y_test), classifier_hyperparams
 
+
 def successive_halving(
     start_dset_size: int,
     data_df: pd.DataFrame,
@@ -74,7 +80,7 @@ def successive_halving(
                 params | {"accuracy": accuracy}
                 for accuracy, params in hyperparam_scores
             ]
-            
+
             if len(curr_hyperparams) <= 1:
                 break
 
