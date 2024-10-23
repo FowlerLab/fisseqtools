@@ -148,6 +148,9 @@ def search_gradient_boost_hyperparams(
 def split_pheno_data(data_csv_path: TextIO, strat_col: str = "geno") -> None:
     data_df = pd.read_csv(data_csv_path)
     data_df["embedding_index"] = data_df.index
+    strat_counts = data_df[strat_col].value_counts()
+    # Remove any genotypes with a frequency less than 10
+    data_df = data_df[data_df[strat_col].isin(strat_counts[strat_counts >= 10].index)]
     strat_labels = data_df[strat_col]
 
     x_train, x_test_val, y_train, y_test_val = sklearn.model_selection.train_test_split(

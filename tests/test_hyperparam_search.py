@@ -102,9 +102,9 @@ def test_split_pheno_data(tmpdir):
     csv_file_path = pathlib.Path(tmpdir.join("data.csv"))
     test_data = pd.DataFrame(
         {
-            "geno": ["A", "B"] * 10,
-            "Feature1": np.random.rand(20),
-            "Feature2": np.random.rand(20),
+            "geno": ["A", "B"] * 10 + ["C"],
+            "Feature1": np.random.rand(21),
+            "Feature2": np.random.rand(21),
         }
     )
     test_data.to_csv(csv_file_path)
