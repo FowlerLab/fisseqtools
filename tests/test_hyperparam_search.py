@@ -1,5 +1,6 @@
 import fisseqtools.hyperparam_search
 
+import pathlib
 import random
 import unittest.mock
 
@@ -7,7 +8,6 @@ import pytest
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.base import BaseEstimator, ClassifierMixin
 
 
 @pytest.fixture
@@ -94,3 +94,42 @@ def test_successive_halving(data_df, embeddings, mock_hyperparams_list):
     assert len(result[1]) == 2
     assert len(result[2]) == 1
     assert "accuracy" in result[1][0]
+
+def test_split_pheno_data(tmpdir):
+    csv_file_path = tmpdir.join("data.csv")
+    test_data = pd.df({
+        "geno": ["A", "B"] * 10,
+        "Feature1": np.rand(20),
+        "Feature2": np.rand(20)
+    })
+    test_data.to_csv(csv_file_path)
+    fisseqtools.hyperparam_search.hysplit_pheno_data(data_csv_path=csv_file_path)
+
+    # Expected output file paths
+    train_file_path = csv_file_path.with_suffix(".train.csv")
+    val_file_path = csv_file_path.with_suffix(".val.csv")
+    test_file_path = csv_file_path.with_suffix(".test.csv")
+
+    assert train_file_path.exists()
+    assert val_file_path.exists()
+    assert test_file_path.exists()
+
+    train_df = pd.read_csv(train_file_path)
+    val_df = pd.read_csv(val_file_path)
+    test_df = pd.read_csv(test_file_path)
+
+    # Assert that the splits have the expected number of rows
+    assert len(train_df) == 16 
+    assert len(val_df) == 2
+    assert len(test_df) == 2
+
+    assert "embedding_index" in train_df.columns
+    assert "embedding_index" in val_df.columns
+    assert "embedding_index" in test_df.columns
+
+    assert train_df["geno"].value_counts()["A"] == 8
+    assert train_df["geno"].value_counts()["B"] == 8
+    assert val_df["geno"].value_counts()["A"] == 1
+    assert val_df["geno"].value_counts()["B"] == 1
+    assert test_df["geno"].value_counts()["A"] == 1
+    assert test_df["geno"].value_counts()["B"] == 1
