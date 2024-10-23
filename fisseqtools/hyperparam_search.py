@@ -2,6 +2,7 @@
 
 import concurrent.futures
 import functools
+import json
 import math
 import os
 import pickle
@@ -138,6 +139,9 @@ def search_gradient_boost_hyperparams(
         hyperparams,
         num_threads=num_threads,
     )
+
+    with open(results_path, "w") as f:
+        json.dump(results, f, indent=2)
 
 
 def split_pheno_data(data_csv_path: TextIO, strat_col: str = "geno") -> None:
