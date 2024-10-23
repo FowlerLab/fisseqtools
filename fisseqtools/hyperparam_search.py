@@ -9,6 +9,7 @@ import pickle
 import pathlib
 from typing import Any, Dict, List, Tuple, Type, TextIO
 
+import fire
 import numpy as np
 import pandas as pd
 import sklearn.base
@@ -160,3 +161,7 @@ def split_pheno_data(data_csv_path: TextIO, strat_col: str = "geno") -> None:
     x_train.to_csv(data_csv_path.with_suffix(".train.csv"))
     x_val.to_csv(data_csv_path.with_suffix(".val.csv"))
     x_test.to_csv(data_csv_path.with_suffix(".test.csv"))
+
+
+if __name__ == "__main__":
+    fire.Fire({"split": split_pheno_data, "search": search_gradient_boost_hyperparams})
