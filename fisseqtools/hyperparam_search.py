@@ -94,8 +94,12 @@ def successive_halving(
 
     return results_dict
 
-def search_gradient_boost_hyperparams(
-    data_df_path: os.PathLike,
-    embeddings_pkl_path: os.PathLike,
-    results_path: os.PathLike,
-)
+def split_dataframe(
+    data_csv_path: TextIO,
+    strat_col: str = "geno"
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    data_df["embedding_index"] = data_df.index
+    strat_labels = data_df[strat_col]
+    
+    x_train, x_test_val, y_tain, y_test_val = sklearn.model_selection.train_test_split(
+        
