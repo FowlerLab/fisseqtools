@@ -34,3 +34,6 @@ dev = [
     "black",
     "pytest",
 ]
+
+[tool.setuptools]
+packages = ["fisseqtools"]

@@ -2,14 +2,18 @@
 
 import concurrent.futures
 import functools
+import math
 import os
 import pickle
+import random
 from typing import Any, Dict, List, Tuple, Type
 
 import numpy as np
 import pandas as pd
 import sklearn.base
 import sklearn.model_selection
+import sklearn.ensemble
+import tqdm
 
 
 def sample_wt_sms(
@@ -66,7 +70,9 @@ def successive_halving(
     curr_hyperparams = hyperparams_list.copy()
     curr_round = 1
 
-    with concurrent.futures.ThreadPoolExecutor(num_threads) as executor:
+    with concurrent.futures.ThreadPoolExecutor(num_threads) as executor, tqdm.tqdm(
+        total=math.ceil(math.log2(len(curr_hyperparams)))
+    ) as main_pbar:
         while True:
             wt_df, ms_df = sample_wt_sms(data_df, start_dset_size)
             xtrain_xtest_ytrain_ytest = get_train_test_split(wt_df, ms_df, embeddings)
@@ -76,7 +82,15 @@ def successive_halving(
                 xtrain_xtest_ytrain_ytest=xtrain_xtest_ytrain_ytest,
             )
 
-            hyperparam_scores = list(executor.map(test_fun, curr_hyperparams))
+            futures = [executor.submit(test_fun, params) for params in curr_hyperparams]
+            hyperparam_scores = [
+                future.result()
+                for future in tqdm.tqdm(
+                    concurrent.futures.as_completed(futures),
+                    total=len(futures),
+                    leave=False,
+                )
+            ]
             hyperparam_scores.sort(reverse=True)
             results_dict[curr_round] = [
                 params | {"accuracy": accuracy}
@@ -91,11 +105,34 @@ def successive_halving(
             ]
             curr_round += 1
             start_dset_size *= 2
+            main_pbar.update()
 
     return results_dict
+
 
 def search_gradient_boost_hyperparams(
     data_df_path: os.PathLike,
     embeddings_pkl_path: os.PathLike,
     results_path: os.PathLike,
-)
+    num_threads: int = 1,
+    max_depth: int = 32,
+    num_estimators: int = 128,
+    start_dset_size: int = 1024,
+) -> None:
+    data_df = pd.read_csv(data_df_path)
+    with open(embeddings_pkl_path, "rb") as f:
+        embeddings = pickle.load(f)
+
+    hyperparams = [
+        {"max_depth": i, "n_estimators": num_estimators}
+        for i in range(1, max_depth + 1)
+    ]
+
+    results = successive_halving(
+        start_dset_size,
+        data_df,
+        embeddings,
+        sklearn.ensemble.GradientBoostingClassifier,
+        hyperparams,
+        num_threads=num_threads
+    )
