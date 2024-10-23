@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 
 @pytest.fixture
 def data_df():
-    return pd.DataFrame(
+    data_df = pd.DataFrame(
         {
             "Variant_Class": ["WT"] * 10
             + random.choices(["Single Missense", "Multiple", "Nonsense"], k=10),
@@ -20,6 +20,8 @@ def data_df():
             "Feature2": np.random.rand(20),
         }
     )
+    data_df["embedding_index"] = data_df.index
+    return data_df
 
 
 @pytest.fixture
@@ -95,15 +97,18 @@ def test_successive_halving(data_df, embeddings, mock_hyperparams_list):
     assert len(result[2]) == 1
     assert "accuracy" in result[1][0]
 
+
 def test_split_pheno_data(tmpdir):
-    csv_file_path = tmpdir.join("data.csv")
-    test_data = pd.df({
-        "geno": ["A", "B"] * 10,
-        "Feature1": np.rand(20),
-        "Feature2": np.rand(20)
-    })
+    csv_file_path = pathlib.Path(tmpdir.join("data.csv"))
+    test_data = pd.DataFrame(
+        {
+            "geno": ["A", "B"] * 10,
+            "Feature1": np.random.rand(20),
+            "Feature2": np.random.rand(20),
+        }
+    )
     test_data.to_csv(csv_file_path)
-    fisseqtools.hyperparam_search.hysplit_pheno_data(data_csv_path=csv_file_path)
+    fisseqtools.hyperparam_search.split_pheno_data(csv_file_path)
 
     # Expected output file paths
     train_file_path = csv_file_path.with_suffix(".train.csv")
@@ -119,7 +124,7 @@ def test_split_pheno_data(tmpdir):
     test_df = pd.read_csv(test_file_path)
 
     # Assert that the splits have the expected number of rows
-    assert len(train_df) == 16 
+    assert len(train_df) == 16
     assert len(val_df) == 2
     assert len(test_df) == 2
 

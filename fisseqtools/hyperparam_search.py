@@ -38,7 +38,9 @@ def get_train_test_split(
     test_size: float = 0.2,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Get training X and Y train and test arrays"""
-    embedding_indices = np.concat((wt_df.index.to_numpy(), ms_df.index.to_numpy()))
+    embedding_indices = np.concat(
+        (wt_df["embedding_index"].to_numpy(), ms_df["embedding_index"].to_numpy())
+    )
     sample_embeddings = embeddings[embedding_indices]
     sample_labels = np.zeros(len(sample_embeddings), dtype=bool)
     sample_labels[: len(wt_df)] = True
@@ -134,24 +136,22 @@ def search_gradient_boost_hyperparams(
         embeddings,
         sklearn.ensemble.GradientBoostingClassifier,
         hyperparams,
-        num_threads=num_threads
+        num_threads=num_threads,
     )
 
-def split_pheno_data(
-    data_csv_path: TextIO,
-    strat_col: str = "geno"
-) -> None:
+
+def split_pheno_data(data_csv_path: TextIO, strat_col: str = "geno") -> None:
     data_df = pd.read_csv(data_csv_path)
     data_df["embedding_index"] = data_df.index
     strat_labels = data_df[strat_col]
-    
+
     x_train, x_test_val, y_train, y_test_val = sklearn.model_selection.train_test_split(
         data_df, strat_labels, train_size=0.8, stratify=strat_labels
     )
     x_test, x_val, y_test, y_val = sklearn.model_selection.train_test_split(
         x_test_val, y_test_val, train_size=0.5, stratify=y_test_val
     )
-        
+
     data_csv_path = pathlib.Path(data_csv_path)
     x_train.to_csv(data_csv_path.with_suffix(".train.csv"))
     x_val.to_csv(data_csv_path.with_suffix(".val.csv"))
