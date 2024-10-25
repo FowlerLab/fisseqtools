@@ -95,7 +95,7 @@ def successive_halving(
                     leave=False,
                 )
             ]
-            hyperparam_scores.sort(reverse=True)
+            hyperparam_scores.sort(reverse=True, key=lambda x: x[0])
             results_dict[curr_round] = [
                 params | {"accuracy": accuracy}
                 for accuracy, params in hyperparam_scores
@@ -120,7 +120,8 @@ def search_gradient_boost_hyperparams(
     results_path: os.PathLike,
     num_threads: int = 1,
     max_depth: int = 32,
-    num_estimators: int = 128,
+    num_estimators: int = 1536,
+    early_stop_iter: int = 32,
     start_dset_size: int = 1024,
 ) -> None:
     data_df = pd.read_csv(data_df_path)
@@ -128,7 +129,11 @@ def search_gradient_boost_hyperparams(
         embeddings = pickle.load(f)
 
     hyperparams = [
-        {"max_depth": i, "n_estimators": num_estimators}
+        {
+            "max_depth": i,
+            "n_estimators": num_estimators,
+            "n_iter_no_change": early_stop_iter,
+        }
         for i in range(1, max_depth + 1)
     ]
 

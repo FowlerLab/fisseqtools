@@ -1,5 +1,3 @@
-import fisseqtools.hyperparam_search
-
 import pathlib
 import random
 import unittest.mock
@@ -8,6 +6,8 @@ import pytest
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+
+import fisseqtools.hyperparam_search
 
 
 @pytest.fixture
