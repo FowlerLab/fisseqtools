@@ -7,6 +7,7 @@ import pathlib
 import pickle
 from typing import List, Tuple, Dict, Any
 
+import fire
 import numpy as np
 import pandas as pd
 import sklearn.base
@@ -181,3 +182,7 @@ def train_models(
                     "mutant_auc": test_mutant_auc,
                 }
             )
+
+
+if __name__ == "__main__":
+    fire.Fire({"select": train_models})
