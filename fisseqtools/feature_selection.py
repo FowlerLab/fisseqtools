@@ -1,12 +1,17 @@
 import collections
 import json
 import os
+import pickle
 from typing import Dict
 
 import fire
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.cluster.hierarchy
+import scipy.sparse
+import scipy.spatial.distance
+import scipy.stats
 
 
 def get_count(
@@ -102,6 +107,30 @@ def graph_cum_cell_variant_count(
         summary = summary[::sum_stride]
         summary = summary[: min(num_sum_rows, len(summary))]
         print(summary)
+
+
+def graph_feature_correlation(
+    feature_matrix_pkl: os.PathLike,
+    fig_file_name: os.PathLike,
+) -> None:
+    with open(feature_matrix_pkl, "rb") as f:
+        feature_stack: np.ndarray = pickle.load(f)
+
+    spearman_corr, _ = scipy.stats.spearmanr(feature_stack)
+    spearman_corr = np.abs(spearman_corr)
+    condensed_spearman_corr = scipy.spatial.distance.squareform(spearman_corr)
+
+    # Reorder clusters via hierarchal clustering
+    linkage_mat = scipy.cluster.hierarchy.linkage(
+        condensed_spearman_corr, method="average"
+    )
+    dendrogram = scipy.cluster.hierarchy.dendrogram(linkage_mat, no_plot=True)
+    cluster_indices = dendrogram["leaves"]
+    spearman_corr = spearman_corr[cluster_indices, :][:, cluster_indices]
+
+    plt.imshow(spearman_corr, cmap="plasma", aspect="equal")
+    plt.title("Feature Correlation With Hierarchical Clustering Reordering")
+    plt.savefig(fig_file_name)
 
 
 if __name__ == "__main__":
