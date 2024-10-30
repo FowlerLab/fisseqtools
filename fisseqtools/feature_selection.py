@@ -18,6 +18,7 @@ import scipy.spatial.distance
 import scipy.stats
 import sklearn.feature_selection
 import sklearn.preprocessing
+import sklearn.model_selection
 import tqdm
 
 
@@ -156,6 +157,7 @@ def get_mutual_info(
     data_path: os.PathLike,
     feature_matrix_pkl: os.PathLike,
     save_dir: os.PathLike,
+    sample: float | None = None,
 ) -> None:
     save_path = pathlib.Path(save_dir)
     data_df = pd.read_csv(data_path)
@@ -166,13 +168,22 @@ def get_mutual_info(
     label_encoder.fit(data_df["geno"])
     labels = label_encoder.transform(data_df["geno"])
     select_features = features[data_df["embedding_index"].to_numpy()]
+
+    if sample:
+        sss = sklearn.model_selection.StratifiedShuffleSplit(
+            n_splits=1, test_size=1 - sample
+        )
+        sample_idx = next(sss.split(select_features, labels))
+        labels = labels[sample_idx]
+        select_features = select_features[sample_idx]
+
     mutual_information = sklearn.feature_selection.mutual_info_classif(
         select_features, labels
     )
     np.save(save_path / "me-all.npy", mutual_information)
 
     unique_labels = np.sort(np.unique(labels))
-    me_matrix = np.empty((len(labels), features.shape[0]), dtype=float)
+    me_matrix = np.zeros((len(labels), features.shape[0]), dtype=float)
 
     for curr_label in tqdm.tqdm(unique_labels, desc="Computing ME Matrix"):
         curr_label_vec = np.zeros(len(labels), dtype=int)
