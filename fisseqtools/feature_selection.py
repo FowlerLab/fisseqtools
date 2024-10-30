@@ -15,6 +15,7 @@ import scipy.cluster.hierarchy
 import scipy.sparse
 import scipy.spatial.distance
 import scipy.stats
+import sklearn.feature_selection
 import sklearn.preprocessing
 
 
@@ -116,13 +117,13 @@ def graph_cum_cell_variant_count(
 def graph_feature_correlation(
     feature_matrix_pkl: os.PathLike,
     fig_file_name: os.PathLike,
-    sample: float | None = None
+    sample: float | None = None,
 ) -> None:
     print("Loading Features...")
     with open(feature_matrix_pkl, "rb") as f:
         feature_stack: np.ndarray = pickle.load(f)
-        
-    feature_stack = feature_stack[:,384:769]
+
+    feature_stack = feature_stack[:, 384:769]
     if sample:
         num_rows = feature_stack.shape[0]
         feature_stack = feature_stack[
@@ -135,9 +136,7 @@ def graph_feature_correlation(
 
     # Reorder clusters via hierarchal clustering
     print("Clustering...")
-    linkage_mat = scipy.cluster.hierarchy.linkage(
-        abs_spearman_corr, method="average"
-    )
+    linkage_mat = scipy.cluster.hierarchy.linkage(abs_spearman_corr, method="average")
     dendrogram = scipy.cluster.hierarchy.dendrogram(linkage_mat, no_plot=True)
     cluster_indices = dendrogram["leaves"]
     spearman_corr = spearman_corr[cluster_indices, :][:, cluster_indices]
@@ -149,15 +148,27 @@ def graph_feature_correlation(
     plt.title("Feature Correlation With Hierarchical Clustering Reordering")
     plt.colorbar()
     plt.savefig(fig_file_name)
-    
-    
+
+
 def get_mutual_info(
     data_path: os.PathLike,
     feature_matrix_pkl: os.PathLike,
     save_path: os.PathLike,
+    n_threads: int = 1
 ) -> None:
     data_df = pd.read_csv(data_path)
-    
+    with open(feature_matrix_pkl, "rb") as f:
+        features: np.ndarray = pickle.load(f)
+
+    label_encoder = sklearn.preprocessing.LabelEncoder()
+    label_encoder.fit(data_df["geno"])
+    labels = label_encoder.transform(data_df["geno"])
+    select_features = features[data_df["embedding_index"].to_numpy()]
+    mutual_information = sklearn.feature_selection.mutual_info_classif(
+        select_features, labels, n_jobs=n_threads
+    )
+
+    np.save(save_path, mutual_information)
 
 
 if __name__ == "__main__":
