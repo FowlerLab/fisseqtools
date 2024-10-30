@@ -1,17 +1,21 @@
 import collections
 import json
+import math
 import os
 import pickle
 from typing import Dict
 
 import fire
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import matplotlib.cm as cm
 import numpy as np
 import pandas as pd
 import scipy.cluster.hierarchy
 import scipy.sparse
 import scipy.spatial.distance
 import scipy.stats
+import sklearn.preprocessing
 
 
 def get_count(
@@ -112,25 +116,48 @@ def graph_cum_cell_variant_count(
 def graph_feature_correlation(
     feature_matrix_pkl: os.PathLike,
     fig_file_name: os.PathLike,
+    sample: float | None = None
 ) -> None:
+    print("Loading Features...")
     with open(feature_matrix_pkl, "rb") as f:
         feature_stack: np.ndarray = pickle.load(f)
+        
+    feature_stack = feature_stack[:,384:769]
+    if sample:
+        num_rows = feature_stack.shape[0]
+        feature_stack = feature_stack[
+            np.random.choice(num_rows, math.ceil(num_rows * sample), replace=False), :
+        ]
 
-    spearman_corr, _ = scipy.stats.spearmanr(feature_stack)
-    spearman_corr = np.abs(spearman_corr)
-    condensed_spearman_corr = scipy.spatial.distance.squareform(spearman_corr)
+    print("Calculating Spearman Correlation...")
+    spearman_corr = np.corrcoef(feature_stack.T)
+    abs_spearman_corr = np.abs(spearman_corr)
 
     # Reorder clusters via hierarchal clustering
+    print("Clustering...")
     linkage_mat = scipy.cluster.hierarchy.linkage(
-        condensed_spearman_corr, method="average"
+        abs_spearman_corr, method="average"
     )
     dendrogram = scipy.cluster.hierarchy.dendrogram(linkage_mat, no_plot=True)
     cluster_indices = dendrogram["leaves"]
     spearman_corr = spearman_corr[cluster_indices, :][:, cluster_indices]
 
-    plt.imshow(spearman_corr, cmap="plasma", aspect="equal")
+    print("Saving Image...")
+    cmap = cm.get_cmap("coolwarm")
+    norm = mcolors.TwoSlopeNorm(vmin=-1.0, vcenter=0.0, vmax=1.0)
+    plt.imshow(spearman_corr, cmap=cmap, norm=norm, aspect="equal")
     plt.title("Feature Correlation With Hierarchical Clustering Reordering")
+    plt.colorbar()
     plt.savefig(fig_file_name)
+    
+    
+def get_mutual_info(
+    data_path: os.PathLike,
+    feature_matrix_pkl: os.PathLike,
+    save_path: os.PathLike,
+) -> None:
+    data_df = pd.read_csv(data_path)
+    
 
 
 if __name__ == "__main__":
