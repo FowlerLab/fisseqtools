@@ -155,9 +155,9 @@ def graph_feature_correlation(
 def get_mutual_info(
     data_path: os.PathLike,
     feature_matrix_pkl: os.PathLike,
-    save_path: os.PathLike,
-    n_threads: int = 1,
+    save_dir: os.PathLike,
 ) -> None:
+    save_path = pathlib.Path(save_dir)
     data_df = pd.read_csv(data_path)
     with open(feature_matrix_pkl, "rb") as f:
         features: np.ndarray = pickle.load(f)
@@ -167,10 +167,25 @@ def get_mutual_info(
     labels = label_encoder.transform(data_df["geno"])
     select_features = features[data_df["embedding_index"].to_numpy()]
     mutual_information = sklearn.feature_selection.mutual_info_classif(
-        select_features, labels, n_jobs=n_threads
+        select_features, labels
     )
+    np.save(save_path / "me-all.npy", mutual_information)
 
-    np.save(save_path, mutual_information)
+    unique_labels = np.sort(np.unique(labels))
+    me_matrix = np.empty((len(labels), features.shape[0]), dtype=float)
+
+    for curr_label in tqdm.tqdm(unique_labels, desc="Computing ME Matrix"):
+        curr_label_vec = np.zeros(len(labels), dtype=int)
+        curr_label_vec[curr_label_vec == curr_label] = 1
+        me_matrix[curr_label] = sklearn.feature_selection.mutual_info_classif(
+            select_features, curr_label_vec
+        )
+
+    np.save(save_path / "me-varmat.npy", me_matrix)
+    np.save(
+        save_path / "label-vec.npy",
+        np.array(label_encoder.inverse_transform(unique_labels)),
+    )
 
 
 if __name__ == "__main__":
