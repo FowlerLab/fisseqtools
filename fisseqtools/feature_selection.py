@@ -183,7 +183,7 @@ def get_mutual_info(
     np.save(save_path / "me-all.npy", mutual_information)
 
     unique_labels = np.sort(np.unique(labels))
-    me_matrix = np.zeros((len(labels), features.shape[0]), dtype=float)
+    me_matrix = np.zeros((len(unique_labels), features.shape[1]), dtype=float)
 
     for curr_label in tqdm.tqdm(unique_labels, desc="Computing ME Matrix"):
         curr_label_vec = np.zeros(len(labels), dtype=int)
@@ -197,6 +197,72 @@ def get_mutual_info(
         save_path / "label-vec.npy",
         np.array(label_encoder.inverse_transform(unique_labels)),
     )
+
+
+def plot_mutual_info_all(
+    mutual_info_npy: os.PathLike,
+    fig_save_dir: os.PathLike,
+    channel_len: int = 384,
+) -> None:
+    save_path = pathlib.Path(fig_save_dir)
+    mutual_info = np.load(mutual_info_npy)
+    mutual_info_x = np.arange(len(mutual_info))
+
+    fig_all, ax_all = plt.subplots()
+    ax_all.plot(mutual_info_x, np.sort(mutual_info)[::-1])
+    ax_all.set_title("Sorted Features Vs. Mutual Information With Genotype Annotation")
+    ax_all.set_xlabel("Features (Sorted)")
+    ax_all.set_ylabel("Mutual Information With Genotype Annotation")
+    fig_all.savefig(save_path / "mutual_info_all.png")
+
+    mutual_info_channels = mutual_info.reshape(
+        (len(mutual_info) // channel_len, channel_len)
+    )
+    avg_mutual_info_channel = np.mean(mutual_info_channels, axis=1).flatten()
+    channel_indices = np.arange(len(avg_mutual_info_channel))
+    colors = plt.get_cmap("terrain")(np.linspace(0, 1, len(channel_indices) + 1))
+    fig_channel_mean, ax_channel_mean = plt.subplots()
+
+    bars = ax_channel_mean.bar(
+        channel_indices, avg_mutual_info_channel, width=1.0, align="edge", color=colors
+    )
+    ax_channel_mean.bar_label(
+        bars, [f"Channel {i + 1}" for i in range(len(avg_mutual_info_channel))]
+    )
+
+    for bar in bars:
+        ax_channel_mean.text(
+            bar.get_x() + bar.get_width() / 2,
+            -0.5,
+            f"Channel {bar.get_x()}",
+            ha="center",
+            va="top",
+        )
+
+    ax_channel_mean.set_title("Mean Mutual Info By Channel")
+    ax_channel_mean.set_xlabel("Channel")
+    ax_channel_mean.set_ylabel("Mean Mutual Info")
+    fig_channel_mean.savefig(save_path / "channel_mean_mutual_info.png")
+
+    fig_me_channels, axs_me_channels = plt.subplots(
+        math.ceil(len(mutual_info_channels) / 2), 2, figsize=(10, 10)
+    )
+
+    for i, channel in enumerate(mutual_info_channels):
+        channel_idx = np.arange(len(channel))
+        channel = np.sort(channel)[::-1]
+        curr_ax = axs_me_channels[i // 2, i % 2]
+
+        curr_ax.plot(channel_idx, channel)
+        curr_ax.set_ylim(ax_all.get_ylim())
+        curr_ax.set_title(f"Channel {i + 1}")
+        curr_ax.set_xlabel("Channel Features (Sorted)")
+        curr_ax.set_ylabel("Mutual Information")
+
+    fig_me_channels.suptitle(
+        "Channel Wise Sorted Features Vs. Mutual Information With Genotype Annotation"
+    )
+    fig_me_channels.savefig(save_path / "channel_wise_mutual_info.png")
 
 
 if __name__ == "__main__":
