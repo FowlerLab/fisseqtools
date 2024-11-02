@@ -78,9 +78,9 @@ def search_hyperparams(
 
     param_dist = {
         "max_depth": np.arange(1, 17, dtype=int),
-        "learning_rate": 10 ** np.arange(-3, 1, dtype=float),
-        "reg_alpha": 10 ** np.arange(-3, 1, dtype=float),
-        "reg_lambda": 10 ** np.arange(-3, 1, dtype=float),
+        "learning_rate": 10 ** np.arange(-3, 0, dtype=float),
+        "reg_alpha": 10 ** np.arange(-3, 0, dtype=float),
+        "reg_lambda": 10 ** np.arange(-3, 0, dtype=float),
     }
 
     halving_random_search = sklearn.model_selection.HalvingRandomSearchCV(
