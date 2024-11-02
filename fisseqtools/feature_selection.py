@@ -173,7 +173,7 @@ def get_mutual_info(
         sss = sklearn.model_selection.StratifiedShuffleSplit(
             n_splits=1, test_size=1 - sample
         )
-        sample_idx = next(sss.split(select_features, labels))
+        sample_idx, _ = next(sss.split(select_features, labels))
         labels = labels[sample_idx]
         select_features = select_features[sample_idx]
 
