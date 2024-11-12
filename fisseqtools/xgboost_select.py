@@ -18,62 +18,61 @@ import xgboost
 from .hyperparam_search import sample_wt_sms, get_train_test_split
 
 
-def get_even_training_data(
-    n_samples: int,
+def get_train_val_split(
+    val_split: float,
     train_data_df: pd.DataFrame,
     embeddings: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    n_samples = math.ceil(1 / val_split)
     geno_counts = train_data_df["geno"].value_counts()
     train_data_df = train_data_df[
         train_data_df["geno"].isin(geno_counts[geno_counts >= n_samples].index)
     ]
-
+    embeddings = embeddings[train_data_df["embedding_index"].to_numpy()]
     label_encoder = sklearn.preprocessing.LabelEncoder()
-    label_encoder.fit(train_data_df["geno"])
-    labels = label_encoder.transform(train_data_df["geno"])
-
-    splitter = sklearn.model_selection.StratifiedShuffleSplit(
-        n_splits=1, train_size=n_samples * len(np.unique(labels))
+    labels = label_encoder.fit_transform(train_data_df["geno"])
+    x_train, x_eval, y_train, y_eval = sklearn.model_selection.train_test_split(
+        embeddings, labels, test_size=val_split, stratify=labels
     )
-    data_idx, _ = next(splitter.split(embeddings, labels))
-    return embeddings[data_idx], labels[data_idx]
+    
+    shuffle_split = sklearn.model_selection.StratifiedShuffleSplit(
+        n_splits=1, train_size=min(0.5, 3 * val_split)
+    )
+    sample_index, _ = next(shuffle_split.split(x_train, y_train))
+    x_train_sample = x_train[sample_index]
+    y_train_sample = y_train[sample_index]
+    
+    return x_train_sample, x_eval, y_train_sample, y_eval
 
 
 def search_hyperparams(
     train_data_df_path: os.PathLike,
     embeddings_pkl_path: os.PathLike,
     output_path: os.PathLike,
-    select_top_k: Optional[int | None] = None,
-    mutual_info_npy: Optional[os.PathLike | None] = None,
-    n_geno_samples: Optional[int] = 220,
+    val_split: Optional[float] = 0.1,
     n_threads: Optional[int] = 1,
 ) -> None:
     train_data_df = pd.read_csv(train_data_df_path)
     with open(embeddings_pkl_path, "rb") as f:
         embeddings = pickle.load(f)
-    embeddings = embeddings[train_data_df["embedding_index"].to_numpy()]
 
-    if select_top_k is not None:
-        if mutual_info_npy is None:
-            warnings.warn(
-                "A Mutual Info npy file must be provided to select top k features."
-                " Top k selection will not be performed.",
-                RuntimeWarning,
-            )
-        else:
-            mutual_info = np.load(mutual_info_npy)
-            top_k_embeddings_idx = mutual_info.argsort()[::-1]
-            top_k_embeddings_idx = top_k_embeddings_idx[:select_top_k]
-            embeddings = embeddings[:, top_k_embeddings_idx]
-
-    x_data, y_data = get_even_training_data(n_geno_samples, train_data_df, embeddings)
+    x_train, x_eval, y_train, y_eval = get_train_val_split(
+        val_split, train_data_df, embeddings
+    )
     xgb_classifier = xgboost.XGBClassifier(
         objective="multi:softprob",
-        num_class=len(np.unique(y_data)),
+        num_class=len(np.unique(y_train)),
         eval_metric="mlogloss",
+        n_estimators=4096,
+        early_stopping_rounds=16,
     )
-    x_train, x_eval, y_train, y_eval = sklearn.model_selection.train_test_split(
-        x_data, y_data, test_size=0.1, stratify=y_data
+
+    validation_fold = [-1] * len(x_train) + [0] * len(x_eval)
+    train_val_split = sklearn.model_selection.PredefinedSplit(validation_fold)
+    x_combined = np.vstack((x_train, x_eval))
+    y_combined = np.concatenate((y_train, y_eval))
+    sample_weights = sklearn.utils.class_weight.compute_sample_weight(
+        class_weight="balanced", y=y_train
     )
 
     param_dist = {
@@ -83,27 +82,32 @@ def search_hyperparams(
         "reg_lambda": 10 ** np.arange(-3, 0, dtype=float),
     }
 
-    halving_random_search = sklearn.model_selection.HalvingRandomSearchCV(
+    halving_random_search = sklearn.model_selection.RandomizedSearchCV(
         estimator=xgb_classifier,
         param_distributions=param_dist,
-        factor=2,
-        resource="n_estimators",
-        max_resources=2048,
-        min_resources=64,
+        n_iter=64,
         verbose=3,
-        cv=5,
+        cv=train_val_split,
         n_jobs=n_threads,
     )
 
     halving_random_search.fit(
-        x_train,
-        y_train,
-        eval_set=([x_eval, y_eval]),
-        early_stopping_rounds=16,
+        x_combined,
+        y_combined,
+        eval_set=[(x_eval, y_eval)],
+        sample_weight=sample_weights,
     )
 
     with open(pathlib.Path(output_path) / "best_params.json", "w") as f:
         json.dump(halving_random_search.best_params_, f)
+
+
+def train_xgboost(
+    train_data_df_path: os.PathLike,
+    eval_data_df_path: os.PathLike,
+    embeddings_pkl_path: os.PathLike,
+    output_dir: os.PathLike,
+) -> None:
 
 if __name__ == "__main__":
     fire.Fire({"search": search_hyperparams})
