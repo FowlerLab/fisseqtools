@@ -1,8 +1,8 @@
+import csv
 import math
 import os
 import pathlib
 import pickle
-import warnings
 from typing import Optional, Tuple
 
 import fire
@@ -10,12 +10,11 @@ import json
 import numpy as np
 import pandas as pd
 import sklearn.experimental.enable_halving_search_cv
+import sklearn.metrics
 import sklearn.model_selection
 import sklearn.preprocessing
 import sklearn.utils.class_weight
 import xgboost
-
-from .hyperparam_search import sample_wt_sms, get_train_test_split
 
 
 def get_train_val_split(
@@ -108,6 +107,52 @@ def train_xgboost(
     embeddings_pkl_path: os.PathLike,
     output_dir: os.PathLike,
 ) -> None:
+    with open(embeddings_pkl_path, "rb") as f:
+        embeddings = pickle.load(f)
+
+    train_df = pd.read_csv(train_data_df_path)
+    train_embeddings = embeddings[train_df["embedding_index"].to_numpy()]
+    eval_df = pd.read_csv(eval_data_df_path)
+    eval_embeddings = embeddings[eval_df["embedding_index"].to_numpy()]
+
+    label_encoder = sklearn.preprocessing.LabelEncoder()
+    all_labels = train_embeddings["geno"].append(eval_embeddings["geno"])
+    label_encoder = sklearn.preprocessing.LabelEncoder()
+    label_encoder = label_encoder.fit(all_labels)
+
+    train_labels = label_encoder.transform(train_embeddings["geno"])
+    eval_labels = label_encoder.transform(eval_embeddings["geno"])
+    all_labels = np.concat((train_labels, eval_labels))
+    sample_weights = sklearn.utils.class_weight.compute_sample_weight(
+        class_weight="balanced", y=train_labels
+    )
+
+    xgb_clf = xgboost.XGBClassifier(use_label_encoder=False, eval_metric="mlogloss")
+    xgb_clf.fit(
+        train_embeddings,
+        train_labels,
+        sample_weight=sample_weights,
+        eval_set=[(eval_embeddings, eval_labels)],
+        eval_sample_weight=[sample_weights],
+        early_stopping_rounds=8,
+        verbose=True
+    )
+
+    output_path = pathlib.Path(output_dir)
+    with open(output_path / "model.pkl", "wb") as f:
+        pickle.dump(xgb_clf, f)
+
+    pred_eval_labels = xgb_clf.predict(eval_embeddings)
+    pred_eval_labels = label_encoder.inverse_transform(pred_eval_labels)
+    eval_predictions = pd.DataFrame({
+        "embedding_index": eval_df["embedding_index"],
+        "true_geno": eval_df["geno"],
+        "predicted_geno": pred_eval_labels,
+    })
+
+    eval_predictions.to_csv(output_path / "eval_predictions.csv")
+    pred_eval_probs = xgb_clf.predict_proba(eval_embeddings)
+    np.save(output_path / "eval_probs.npy", pred_eval_probs)
 
 if __name__ == "__main__":
-    fire.Fire({"search": search_hyperparams})
+    fire.Fire({"search": search_hyperparams, "train": train_xgboost})
