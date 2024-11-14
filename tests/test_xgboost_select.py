@@ -122,7 +122,15 @@ def test_save_metrics(tmp_path, metrics_sample_data):
     auc_roc_series = pd.Series([0.85, 0.75, 0.65], index=label_encoder.classes_)
     accuracy_series = pd.Series([0.90, 0.80, 0.70], index=label_encoder.classes_)
     data_df = pd.DataFrame({"aaChanges": label_encoder.classes_})
-    save_metrics(data_df, auc_roc_series, accuracy_series, "aaChanges", tmp_path, ["A", "B"], ["B", "A"])
+    save_metrics(
+        data_df,
+        auc_roc_series,
+        accuracy_series,
+        "aaChanges",
+        tmp_path,
+        ["A", "B"],
+        ["B", "A"],
+    )
 
     metrics_file = tmp_path / "metrics.csv"
     assert metrics_file.exists()
