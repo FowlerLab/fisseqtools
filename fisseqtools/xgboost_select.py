@@ -126,7 +126,7 @@ def xgboost_select(
     # Load and preprocess data
     valid_labels, valid_embeddings = filter_labels(labels, embeddings, frequency_cutoff)
     label_encoder = sklearn.preprocessing.LabelEncoder()
-    label_encoder.fit(labels)
+    label_encoder.fit(valid_labels)
     encoded_labels = label_encoder.transform(valid_labels)
 
     # Split data
