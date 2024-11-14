@@ -45,16 +45,14 @@ def train_model(
     x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray, y_eval: np.ndarray
 ) -> xgb.XGBClassifier:
     sample_weights = sklearn.utils.compute_sample_weight(
-        class_weight="balanced", y=y_train
+        class_weight="balanced", y=y_train,
     )
-    xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric="mlogloss")
+    xgb_clf = xgb.XGBClassifier(use_label_encoder=False, eval_metric="mlogloss",  early_stopping_rounds=5,)
     xgb_clf.fit(
         x_train,
         y_train,
         sample_weight=sample_weights,
         eval_set=[(x_eval, y_eval)],
-        eval_sample_weight=[sample_weights],
-        early_stopping_rounds=5,
         verbose=True,
     )
     return xgb_clf
