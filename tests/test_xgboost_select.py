@@ -85,8 +85,13 @@ def test_compute_metrics(metrics_sample_data):
             )
 
     model = MockModel()
-    auc_roc_series, accuracy_series = compute_metrics(
+    auc_roc_series, accuracy_series, label_true, label_pred = compute_metrics(
         model, x_test, y_test, label_encoder
+    )
+
+    assert np.allclose(label_true, label_encoder.inverse_transform(y_test))
+    assert np.allclose(
+        label_pred, label_encoder.inverse_transform(model.predict(x_test))
     )
 
     accuracies = np.empty((len(label_encoder.classes_),))
@@ -117,10 +122,17 @@ def test_save_metrics(tmp_path, metrics_sample_data):
     auc_roc_series = pd.Series([0.85, 0.75, 0.65], index=label_encoder.classes_)
     accuracy_series = pd.Series([0.90, 0.80, 0.70], index=label_encoder.classes_)
     data_df = pd.DataFrame({"aaChanges": label_encoder.classes_})
-    save_metrics(data_df, auc_roc_series, accuracy_series, "aaChanges", tmp_path)
+    save_metrics(data_df, auc_roc_series, accuracy_series, "aaChanges", tmp_path, ["A", "B"], ["B", "A"])
 
     metrics_file = tmp_path / "metrics.csv"
     assert metrics_file.exists()
+
+    predictions_file = tmp_path / "predictions.csv"
+    assert predictions_file.exists()
+
+    test_predictions = pd.read_csv(predictions_file)
+    assert test_predictions["true_label"].to_list() == ["A", "B"]
+    assert test_predictions["label_predicted"].to_list() == ["B", "A"]
 
     saved_metrics_df = pd.read_csv(metrics_file)
     assert "label" in saved_metrics_df.columns

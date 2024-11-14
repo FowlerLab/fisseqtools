@@ -1,7 +1,7 @@
 import os
 import pathlib
 import pickle
-from typing import Tuple
+from typing import Tuple, Iterable
 
 import fire
 import numpy as np
@@ -65,7 +65,7 @@ def compute_metrics(
     x_test: np.ndarray,
     y_test: np.ndarray,
     label_encoder: sklearn.preprocessing.LabelEncoder,
-) -> Tuple[pd.Series, pd.Series]:
+) -> Tuple[pd.Series, pd.Series, Iterable[str], Iterable[str]]:
     y_pred = model.predict(x_test)
     y_prob = model.predict_proba(x_test)
     y_test_binarized = sklearn.preprocessing.label_binarize(
@@ -86,7 +86,12 @@ def compute_metrics(
     accuracy_df = pd.DataFrame({"label": test_labels, "is_correct": is_correct})
     accuracy_series = accuracy_df.groupby("label")["is_correct"].mean()
 
-    return auc_roc_series, accuracy_series
+    return (
+        auc_roc_series,
+        accuracy_series,
+        test_labels,
+        label_encoder.inverse_transform(y_pred),
+    )
 
 
 def save_metrics(
@@ -95,11 +100,16 @@ def save_metrics(
     accuracy_series: pd.Series,
     select_key: str,
     output_path: pathlib.Path,
+    label_true: Iterable[str],
+    label_pred: Iterable[str],
 ) -> None:
     metrics_df = pd.DataFrame({"label": data_df[select_key].unique()})
     metrics_df["auc_roc"] = metrics_df["label"].map(auc_roc_series)
     metrics_df["accuracy"] = metrics_df["label"].map(accuracy_series)
     metrics_df.to_csv(output_path / "metrics.csv", index=False)
+    pd.DataFrame({"true_label": label_true, "label_predicted": label_pred}).to_csv(
+        output_path / "predictions.csv"
+    )
 
 
 def xgboost_select(
@@ -132,10 +142,18 @@ def xgboost_select(
         pickle.dump(xgb_clf, f)
 
     # Compute and save metrics
-    auc_roc_series, accuracy_series = compute_metrics(
+    auc_roc_series, accuracy_series, label_true, label_pred = compute_metrics(
         xgb_clf, x_test, y_test, label_encoder
     )
-    save_metrics(data_df, auc_roc_series, accuracy_series, select_key, output_path)
+    save_metrics(
+        data_df,
+        auc_roc_series,
+        accuracy_series,
+        select_key,
+        output_path,
+        label_true,
+        label_pred,
+    )
 
 
 if __name__ == "__main__":
