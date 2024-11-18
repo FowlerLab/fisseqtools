@@ -2,12 +2,7 @@ import pytest
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from fisseqtools.xgboost_select import (
-    filter_labels,
-    split_data,
-    compute_metrics,
-    save_metrics,
-)
+from fisseqtools.xgboost_select import compute_metrics, save_metrics, xgboost_select
 
 
 # Sample data for testing
@@ -36,47 +31,14 @@ def metrics_sample_data():
     return x_test, y_test, y_pred, label_encoder
 
 
-# Test filter_labels function
-def test_filter_labels(sample_data):
-    labels, embeddings, frequency_cutoff = sample_data
-    valid_labels, valid_embeddings = filter_labels(labels, embeddings, frequency_cutoff)
-
-    # Check types
-    assert isinstance(valid_labels, pd.Series)
-    assert isinstance(valid_embeddings, np.ndarray)
-
-    # Check that labels with frequency less than cutoff are removed
-    assert all(valid_labels.value_counts() >= frequency_cutoff)
-
-
-# Test split_data function
-def test_split_data(split_sample_data):
-    embeddings, labels = split_sample_data
-    x_train, x_eval, x_test, y_train, y_eval, y_test = split_data(embeddings, labels)
-
-    # Check shapes
-    assert x_train.shape[0] > 0
-    assert x_eval.shape[0] > 0
-    assert x_test.shape[0] > 0
-    assert y_train.shape[0] > 0
-    assert y_eval.shape[0] > 0
-    assert y_test.shape[0] > 0
-
-    # Check stratification
-    assert np.unique(y_train).tolist() == np.unique(labels).tolist()
-
-
-# Test compute_metrics function
 def test_compute_metrics(metrics_sample_data):
     x_test, y_test, y_pred, label_encoder = metrics_sample_data
 
-    # Mock model with preset predictions
     class MockModel:
         def predict(self, X):
             return y_pred
 
         def predict_proba(self, X):
-            # Return random probabilities that match the classes in y_test
             return np.array(
                 [
                     [0.7 if pred == label else 0.15 for label in label_encoder.classes_]
@@ -148,3 +110,87 @@ def test_save_metrics(tmp_path, metrics_sample_data):
     assert "accuracy" in saved_metrics_df.columns
     assert saved_metrics_df["auc_roc"].tolist() == auc_roc_series.tolist()
     assert saved_metrics_df["accuracy"].tolist() == accuracy_series.tolist()
+
+
+def test_train():
+    import xgboost as xgb
+
+    xgb.XGBClassifier(
+        eval_metric="mlogloss",
+        early_stopping_rounds=5,
+        num_class=2,
+    ).fit(
+        np.array([[0, 0], [0, 0], [1, 1], [1, 1]]).astype(float),
+        np.array([0, 0, 1, 1]),
+        eval_set=[
+            (
+                np.array([[0, 0], [0, 0], [1, 1], [1, 1]]).astype(float),
+                np.array([0, 0, 1, 1]),
+            )
+        ],
+        verbose=True,
+    )
+
+
+def test_xgboost_select(tmp_path):
+    train_df = pd.DataFrame(
+        {
+            "label": ["A"] * 50 + ["B"] * 50 + ["C"] * 50,
+            "index": [0] * 50 + [1] * 50 + [2] * 50
+        }
+    )
+    eval_df = pd.DataFrame(
+        {
+            "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
+            "index": [0] * 20 + [1] * 20 + [2] * 20
+        }
+    )
+    test_df = pd.DataFrame(
+        {
+            "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
+            "index": [0] * 20 + [1] * 20 + [2] * 20
+        }
+    )
+    features = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
+
+    train_file = tmp_path / "train.csv"
+    eval_file = tmp_path / "eval.csv"
+    test_file = tmp_path / "test.csv"
+    features_file = tmp_path / "features.npy"
+    output_path = tmp_path / "output"
+
+    # Save input data
+    train_df.to_csv(train_file, index=False)
+    eval_df.to_csv(eval_file, index=False)
+    test_df.to_csv(test_file, index=False)
+    np.save(features_file, features)
+    output_path.mkdir()
+
+    xgboost_select(
+        train_df_path=train_file,
+        eval_df_path=eval_file,
+        test_df_path=test_file,
+        features_path=features_file,
+        output_path=output_path,
+        select_key="label",
+    )
+
+    model_file = output_path / "xgboost_model.pkl"
+    metrics_file = output_path / "metrics.csv"
+    predictions_file = output_path / "predictions.csv"
+
+    assert model_file.exists()
+    assert metrics_file.exists()
+    assert predictions_file.exists()
+
+    metrics_df = pd.read_csv(metrics_file)
+    assert "label" in metrics_df.columns
+    assert "auc_roc" in metrics_df.columns
+    assert "accuracy" in metrics_df.columns
+
+    predictions_df = pd.read_csv(predictions_file)
+    assert "true_label" in predictions_df.columns
+    assert "label_predicted" in predictions_df.columns
+
+    assert all(metrics_df["auc_roc"] == 1.0)
+    assert all(metrics_df["accuracy"] == 1.0)

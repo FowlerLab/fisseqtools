@@ -14,53 +14,19 @@ import sklearn.utils.class_weight
 import xgboost as xgb
 
 
-def filter_labels(
-    labels: pd.Series, embeddings: np.ndarray, frequency_cutoff: int
-) -> Tuple[pd.Series, np.ndarray]:
-    label_counts = labels.value_counts()
-    freq_mask = labels.map(label_counts) >= frequency_cutoff
-    valid_labels = labels[freq_mask]
-    valid_embeddings = embeddings[freq_mask.to_numpy()]
-    return valid_labels, valid_embeddings
-
-
-def split_data(
-    embeddings: np.ndarray, labels: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    (
-        x_train,
-        x_eval_test,
-        y_train,
-        y_eval_test,
-    ) = sklearn.model_selection.train_test_split(
-        embeddings, labels, test_size=0.2, stratify=labels
-    )
-    x_eval, x_test, y_eval, y_test = sklearn.model_selection.train_test_split(
-        x_eval_test, y_eval_test, test_size=0.5, stratify=y_eval_test
-    )
-    return x_train, x_eval, x_test, y_train, y_eval, y_test
-
-
 def train_model(
     x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray, y_eval: np.ndarray
 ) -> xgb.XGBClassifier:
-    sample_weights = sklearn.utils.compute_sample_weight(
-        class_weight="balanced",
-        y=y_train,
-    )
-    xgb_clf = xgb.XGBClassifier(
+    return xgb.XGBClassifier(
         use_label_encoder=False,
         eval_metric="mlogloss",
         early_stopping_rounds=5,
-    )
-    xgb_clf.fit(
+    ).fit(
         x_train,
         y_train,
-        sample_weight=sample_weights,
         eval_set=[(x_eval, y_eval)],
         verbose=True,
     )
-    return xgb_clf
 
 
 def compute_metrics(
@@ -116,28 +82,29 @@ def save_metrics(
 
 
 def xgboost_select(
-    data_df_path: os.PathLike,
-    embeddings_pkl_path: os.PathLike,
+    train_df_path: os.PathLike,
+    eval_df_path: os.PathLike,
+    test_df_path: os.PathLike,
+    features_path: os.PathLike,
     output_path: os.PathLike,
     select_key: str,
-    frequency_cutoff: int,
 ) -> None:
     output_path = pathlib.Path(output_path)
-    data_df = pd.read_csv(data_df_path)
-    with open(embeddings_pkl_path, "rb") as f:
-        embeddings = pickle.load(f)
-    labels = data_df[select_key]
+    train_df = pd.read_csv(train_df_path)
+    eval_df = pd.read_csv(eval_df_path)
+    test_df = pd.read_csv(test_df_path)
+    features = np.load(features_path)
 
-    # Load and preprocess data
-    valid_labels, valid_embeddings = filter_labels(labels, embeddings, frequency_cutoff)
+    x_train = features[train_df["index"]]
+    x_eval = features[eval_df["index"]]
+    x_test = features[test_df["index"]]
+
+    labels = train_df[select_key]
     label_encoder = sklearn.preprocessing.LabelEncoder()
-    label_encoder.fit(valid_labels)
-    encoded_labels = label_encoder.transform(valid_labels)
-
-    # Split data
-    x_train, x_eval, x_test, y_train, y_eval, y_test = split_data(
-        valid_embeddings, encoded_labels
-    )
+    label_encoder.fit(labels)
+    y_train = label_encoder.transform(train_df[select_key])
+    y_eval = label_encoder.transform(eval_df[select_key])
+    y_test = label_encoder.transform(test_df[select_key])
 
     # Train model
     xgb_clf = train_model(x_train, y_train, x_eval, y_eval)
@@ -149,7 +116,7 @@ def xgboost_select(
         xgb_clf, x_test, y_test, label_encoder
     )
     save_metrics(
-        data_df,
+        train_df,
         auc_roc_series,
         accuracy_series,
         select_key,
