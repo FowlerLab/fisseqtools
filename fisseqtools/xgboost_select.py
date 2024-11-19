@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import pickle
@@ -12,29 +13,6 @@ import sklearn.model_selection
 import sklearn.preprocessing
 import sklearn.utils.class_weight
 import xgboost as xgb
-
-
-def train_model(
-    x_train: np.ndarray,
-    y_train: np.ndarray,
-    x_eval: np.ndarray,
-    y_eval: np.ndarray,
-    learning_rate: Optional[float] = 0.1,
-    n_estimators: Optional[int] = 100,
-    max_depth: Optional[int] = 3,
-) -> xgb.XGBClassifier:
-    return xgb.XGBClassifier(
-        eval_metric="mlogloss",
-        early_stopping_rounds=5,
-        learning_rate=learning_rate,
-        n_estimators=n_estimators,
-        max_depth=max_depth,
-    ).fit(
-        x_train,
-        y_train,
-        eval_set=[(x_eval, y_eval)],
-        verbose=True,
-    )
 
 
 def compute_metrics(
@@ -118,15 +96,19 @@ def xgboost_select(
     y_test = label_encoder.transform(test_df[select_key])
 
     # Train model
-    xgb_clf = train_model(
-        x_train,
-        y_train,
-        x_eval,
-        y_eval,
+    xgb_clf = xgb.XGBClassifier(
+        eval_metric="mlogloss",
+        early_stopping_rounds=5,
         learning_rate=learning_rate,
         n_estimators=n_estimators,
         max_depth=max_depth,
+    ).fit(
+        x_train,
+        y_train,
+        eval_set=[(x_eval, y_eval)],
+        verbose=True,
     )
+
     with open(output_path / "xgboost_model.pkl", "wb") as f:
         pickle.dump(xgb_clf, f)
 
@@ -151,7 +133,7 @@ def search_hyperparams(
     features_path: os.PathLike,
     output_path: os.PathLike,
     select_key: str,
-    n_testing_rounds = 20,
+    n_testing_rounds=20,
 ) -> None:
     output_path = pathlib.Path(output_path)
     train_df = pd.read_csv(train_df_path)
@@ -166,12 +148,12 @@ def search_hyperparams(
     label_encoder.fit(labels)
     y_train = label_encoder.transform(train_df[select_key])
     y_eval = label_encoder.transform(eval_df[select_key])
-    
+
     param_dist = {
         "learning_rate": [0.1, 0.01],
         "max_depth": [3, 6, 9, 12],
     }
-    
+
     best_params = None
     best_score = -float("inf")
     best_model = None
@@ -179,27 +161,27 @@ def search_hyperparams(
         print(f"Testing parameters: {params}")
         model = xgb.XGBClassifier(
             eval_metric="mlogloss",
-            learning_rate=params["learn_rate"],
-            n_estimators=20,
+            learning_rate=params["learning_rate"],
+            n_estimators=n_testing_rounds,
             max_depth=params["max_depth"],
         ).fit(
             x_train,
             y_train,
             verbose=True,
         )
-        
+
         curr_score = model.score(x_eval, y_eval)
         if curr_score > best_score:
             best_score = curr_score
             best_params = params
             best_model = model
-            
+
     with open(output_path / "best_xgboost_model.pkl", "wb") as f:
         pickle.dump(best_model, f)
 
-    with open(output_path / "best_xgboost_params_{best_score:.2f}.json", "w") as f:
-        
+    with open(output_path / f"best_xgboost_params_{best_score:.2f}.json", "w") as f:
+        json.dump(best_params, f)
 
 
 if __name__ == "__main__":
-    fire.Fire({"xgboost_select": xgboost_select})
+    fire.Fire({"xgboost_select": xgboost_select, "hyperparams": search_hyperparams})

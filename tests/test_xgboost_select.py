@@ -1,8 +1,17 @@
+import json
+import pickle
+
 import pytest
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import LabelEncoder
-from fisseqtools.xgboost_select import compute_metrics, save_metrics, xgboost_select
+
+from fisseqtools.xgboost_select import (
+    compute_metrics,
+    save_metrics,
+    xgboost_select,
+    search_hyperparams,
+)
 
 
 # Sample data for testing
@@ -112,26 +121,6 @@ def test_save_metrics(tmp_path, metrics_sample_data):
     assert saved_metrics_df["accuracy"].tolist() == accuracy_series.tolist()
 
 
-def test_train():
-    import xgboost as xgb
-
-    xgb.XGBClassifier(
-        eval_metric="mlogloss",
-        early_stopping_rounds=5,
-        num_class=2,
-    ).fit(
-        np.array([[0, 0], [0, 0], [1, 1], [1, 1]]).astype(float),
-        np.array([0, 0, 1, 1]),
-        eval_set=[
-            (
-                np.array([[0, 0], [0, 0], [1, 1], [1, 1]]).astype(float),
-                np.array([0, 0, 1, 1]),
-            )
-        ],
-        verbose=True,
-    )
-
-
 def test_xgboost_select(tmp_path):
     train_df = pd.DataFrame(
         {
@@ -194,3 +183,53 @@ def test_xgboost_select(tmp_path):
 
     assert all(metrics_df["auc_roc"] == 1.0)
     assert all(metrics_df["accuracy"] == 1.0)
+
+
+def test_search_hyperparams(tmp_path):
+    train_df = pd.DataFrame(
+        {
+            "label": ["A"] * 50 + ["B"] * 50 + ["C"] * 50,
+            "index": list(range(150)),
+        }
+    )
+    eval_df = pd.DataFrame(
+        {
+            "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
+            "index": list(range(150, 210)),
+        }
+    )
+    features = np.random.rand(210, 5)
+
+    # Save input data to temporary files
+    train_file = tmp_path / "train.csv"
+    eval_file = tmp_path / "eval.csv"
+    features_file = tmp_path / "features.npy"
+    output_path = tmp_path / "output"
+
+    train_df.to_csv(train_file, index=False)
+    eval_df.to_csv(eval_file, index=False)
+    np.save(features_file, features)
+    output_path.mkdir()
+
+    search_hyperparams(
+        train_df_path=train_file,
+        eval_df_path=eval_file,
+        features_path=features_file,
+        output_path=output_path,
+        select_key="label",
+        n_testing_rounds=5,
+    )
+
+    model_file = output_path / "best_xgboost_model.pkl"
+    params_file = next(output_path.glob("best_xgboost_params_*.json"), None)
+    assert model_file.exists()
+    assert params_file is not None
+
+    with open(params_file, "r") as f:
+        best_params = json.load(f)
+        assert "learning_rate" in best_params
+        assert "max_depth" in best_params
+
+    with open(model_file, "rb") as f:
+        model = pickle.load(f)
+        assert hasattr(model, "predict")
