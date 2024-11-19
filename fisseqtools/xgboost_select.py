@@ -1,7 +1,7 @@
 import os
 import pathlib
 import pickle
-from typing import Tuple, Iterable
+from typing import Tuple, Iterable, Optional
 
 import fire
 import numpy as np
@@ -15,12 +15,18 @@ import xgboost as xgb
 
 
 def train_model(
-    x_train: np.ndarray, y_train: np.ndarray, x_eval: np.ndarray, y_eval: np.ndarray
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    learning_rate: Optional[float] = 0.1,
+    n_estimators: Optional[int] = 100,
 ) -> xgb.XGBClassifier:
     return xgb.XGBClassifier(
-        use_label_encoder=False,
         eval_metric="mlogloss",
         early_stopping_rounds=5,
+        learning_rate=learning_rate,
+        n_estimators=n_estimators,
     ).fit(
         x_train,
         y_train,
@@ -88,6 +94,8 @@ def xgboost_select(
     features_path: os.PathLike,
     output_path: os.PathLike,
     select_key: str,
+    learning_rate: Optional[float] = 0.1,
+    n_estimators: Optional[int] = 100,
 ) -> None:
     output_path = pathlib.Path(output_path)
     train_df = pd.read_csv(train_df_path)
@@ -107,7 +115,14 @@ def xgboost_select(
     y_test = label_encoder.transform(test_df[select_key])
 
     # Train model
-    xgb_clf = train_model(x_train, y_train, x_eval, y_eval)
+    xgb_clf = train_model(
+        x_train,
+        y_train,
+        x_eval,
+        y_eval,
+        learning_rate=learning_rate,
+        n_estimators=n_estimators,
+    )
     with open(output_path / "xgboost_model.pkl", "wb") as f:
         pickle.dump(xgb_clf, f)
 

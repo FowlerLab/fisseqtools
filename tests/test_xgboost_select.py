@@ -136,19 +136,19 @@ def test_xgboost_select(tmp_path):
     train_df = pd.DataFrame(
         {
             "label": ["A"] * 50 + ["B"] * 50 + ["C"] * 50,
-            "index": [0] * 50 + [1] * 50 + [2] * 50
+            "index": [0] * 50 + [1] * 50 + [2] * 50,
         }
     )
     eval_df = pd.DataFrame(
         {
             "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
-            "index": [0] * 20 + [1] * 20 + [2] * 20
+            "index": [0] * 20 + [1] * 20 + [2] * 20,
         }
     )
     test_df = pd.DataFrame(
         {
             "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
-            "index": [0] * 20 + [1] * 20 + [2] * 20
+            "index": [0] * 20 + [1] * 20 + [2] * 20,
         }
     )
     features = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
