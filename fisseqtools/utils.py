@@ -103,6 +103,7 @@ def save_metrics(
     metrics_df["auc_roc"] = metrics_df["label"].map(auc_roc_series)
     metrics_df["accuracy"] = metrics_df["label"].map(accuracy_series)
     metrics_df.to_csv(output_path / "metrics.csv", index=False)
+    metrics_df = metrics_df.sort_values(by="auc_roc", ascending=False)
     pd.DataFrame({"true_label": label_true, "label_predicted": label_pred}).to_csv(
         output_path / "predictions.csv"
     )

@@ -74,9 +74,7 @@ def ovr_select(
         curr_y_train = np.zeros_like(y_train, dtype=int)
         curr_y_train[y_train == curr_label] = 1
         weights = sklearn.utils.compute_sample_weight("balanced", curr_y_train)
-        next_classifier = base_model().fit(
-            x_train, curr_y_train, sample_weight=weights
-        )
+        next_classifier = base_model().fit(x_train, curr_y_train, sample_weight=weights)
 
         curr_y_eval = np.zeros_like(y_eval, dtype=int)
         curr_y_eval[y_eval == curr_label] = 1
