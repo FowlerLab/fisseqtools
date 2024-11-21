@@ -133,7 +133,8 @@ def search_hyperparams(
     features_path: os.PathLike,
     output_path: os.PathLike,
     select_key: str,
-    n_testing_rounds=20,
+    n_testing_rounds: Optional[int] = 20,
+    search_samples: Optional[int] = 60,
 ) -> None:
     output_path = pathlib.Path(output_path)
     train_df = pd.read_csv(train_df_path)
@@ -150,31 +151,40 @@ def search_hyperparams(
     y_eval = label_encoder.transform(eval_df[select_key])
 
     param_dist = {
-        "learning_rate": [0.1, 0.01],
-        "max_depth": [3, 6, 9, 12],
+        "max_depth": [1, 2],
+        "subsample": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        "colsample_bytree": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        "colsample_bylevel": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
+        "colsample_bytree": [0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
     }
 
     best_params = None
     best_score = -float("inf")
     best_model = None
-    for params in sklearn.model_selection.ParameterGrid(param_dist):
-        print(f"Testing parameters: {params}")
+    for params in sklearn.model_selection.ParameterSampler(
+        param_dist, n_iter=search_samples, random_state=42
+    ):
+        print(f"Testing parameters: {params}", flush=True)
         model = xgb.XGBClassifier(
             eval_metric="mlogloss",
-            learning_rate=params["learning_rate"],
+            early_stopping_rounds=2,
+            learning_rate=0.3,
             n_estimators=n_testing_rounds,
-            max_depth=params["max_depth"],
+            **params,
         ).fit(
             x_train,
             y_train,
+            eval_set=[(x_train, y_train), (x_eval, y_eval)],
             verbose=True,
         )
 
         curr_score = model.score(x_eval, y_eval)
+        print(f"Accuracy score: {curr_score:.4f}", flush=True)
         if curr_score > best_score:
             best_score = curr_score
             best_params = params
             best_model = model
+            print("  New Best!", flush=True)
 
     with open(output_path / "best_xgboost_model.pkl", "wb") as f:
         pickle.dump(best_model, f)
