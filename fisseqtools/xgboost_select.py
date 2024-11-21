@@ -14,6 +14,8 @@ import sklearn.preprocessing
 import sklearn.utils.class_weight
 import xgboost as xgb
 
+from .utils import save_metrics
+
 
 def compute_metrics(
     model: xgb.XGBClassifier,
@@ -46,24 +48,6 @@ def compute_metrics(
         accuracy_series,
         test_labels,
         label_encoder.inverse_transform(y_pred),
-    )
-
-
-def save_metrics(
-    data_df: pd.DataFrame,
-    auc_roc_series: pd.Series,
-    accuracy_series: pd.Series,
-    select_key: str,
-    output_path: pathlib.Path,
-    label_true: Iterable[str],
-    label_pred: Iterable[str],
-) -> None:
-    metrics_df = pd.DataFrame({"label": data_df[select_key].unique()})
-    metrics_df["auc_roc"] = metrics_df["label"].map(auc_roc_series)
-    metrics_df["accuracy"] = metrics_df["label"].map(accuracy_series)
-    metrics_df.to_csv(output_path / "metrics.csv", index=False)
-    pd.DataFrame({"true_label": label_true, "label_predicted": label_pred}).to_csv(
-        output_path / "predictions.csv"
     )
 
 

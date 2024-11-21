@@ -10,6 +10,7 @@ from fisseqtools.utils import (
     generate_splits,
     compute_pca,
     get_pca,
+    save_metrics,
 )
 
 
@@ -121,3 +122,37 @@ def test_get_pca(tmp_path):
 
     reduced_features = np.load(pca_path)
     assert reduced_features.shape == (100, 5)
+
+
+def test_save_metrics(tmp_path, metrics_sample_data):
+    x_test, y_test, y_pred, label_encoder = metrics_sample_data
+
+    auc_roc_series = pd.Series([0.85, 0.75, 0.65], index=label_encoder.classes_)
+    accuracy_series = pd.Series([0.90, 0.80, 0.70], index=label_encoder.classes_)
+    data_df = pd.DataFrame({"aaChanges": label_encoder.classes_})
+    save_metrics(
+        data_df,
+        auc_roc_series,
+        accuracy_series,
+        "aaChanges",
+        tmp_path,
+        ["A", "B"],
+        ["B", "A"],
+    )
+
+    metrics_file = tmp_path / "metrics.csv"
+    assert metrics_file.exists()
+
+    predictions_file = tmp_path / "predictions.csv"
+    assert predictions_file.exists()
+
+    test_predictions = pd.read_csv(predictions_file)
+    assert test_predictions["true_label"].to_list() == ["A", "B"]
+    assert test_predictions["label_predicted"].to_list() == ["B", "A"]
+
+    saved_metrics_df = pd.read_csv(metrics_file)
+    assert "label" in saved_metrics_df.columns
+    assert "auc_roc" in saved_metrics_df.columns
+    assert "accuracy" in saved_metrics_df.columns
+    assert saved_metrics_df["auc_roc"].tolist() == auc_roc_series.tolist()
+    assert saved_metrics_df["accuracy"].tolist() == accuracy_series.tolist()
