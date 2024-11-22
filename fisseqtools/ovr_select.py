@@ -26,21 +26,21 @@ TrainFun = Callable[
 ]
 
 
-def train_log_regression(
+def train_log_regression_normalized(
     x_train: np.ndarray,
     y_train: np.ndarray,
     x_eval: np.ndarray,
     y_eval: np.ndarray,
     sample_weight: Optional[np.ndarray | None] = None,
 ) -> sklearn.base.BaseEstimator:
-    l1_strengths = [0.1, 0.01, 0.001]
+    l1_strengths = [1.0, 0.1, 0.01, 0.001]
     max_auc = 0.0
     classifier = None
 
     for l1_strength in l1_strengths:
-        next_classifier = sklearn.linear_model.LogisticRegression(C=l1_strength).fit(
-            x_train, y_train, sample_weight=sample_weight
-        )
+        next_classifier = sklearn.linear_model.LogisticRegression(
+            C=l1_strength, penalty="elasticnet", solver="saga", l1_ratio=0.5
+        ).fit(x_train, y_train, sample_weight=sample_weight)
         y_probs = next_classifier.predict_proba(x_eval)[:, 1].flatten()
         roc_auc = sklearn.metrics.roc_auc_score(y_eval, y_probs)
 
@@ -48,6 +48,18 @@ def train_log_regression(
             classifier = next_classifier
 
     return classifier
+
+
+def train_log_regression(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    sample_weight: Optional[np.ndarray | None] = None,
+) -> sklearn.base.BaseEstimator:
+    return sklearn.linear_model.LogisticRegression().fit(
+        x_train, y_train, sample_weight=sample_weight
+    )
 
 
 def compute_metrics(
