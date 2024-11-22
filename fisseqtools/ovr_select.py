@@ -66,6 +66,45 @@ def train_xgboost(
     )
 
 
+def train_xgboost_reg(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    sample_weight: Optional[np.ndarray | None] = None,
+) -> sklearn.base.BaseEstimator:
+    lambda_values = [1, 5, 10]
+    best_score = 0.00
+    best_model = None
+
+    for lambda_value in lambda_values:
+        print(f"Testing lambda value: {lambda_value}")
+        next_model = xgb.XGBClassifier(
+            objective="binary:logistic",
+            max_depth=1,
+            colsample_bytree=0.5,
+            colsample_bylevel=0.5,
+            colsample_bynode=0.5,
+            reg_lambda=5,
+            early_stopping_rounds=10,
+            n_estimators=100,
+            eval_metric="auc",
+        ).fit(
+            x_train,
+            y_train,
+            eval_set=[(x_train, y_train), (x_eval, y_eval)],
+            sample_weight=sample_weight,
+            verbose=True,
+        )
+
+        curr_score = next_model.best_score
+        if curr_score > best_score:
+            best_score = curr_score
+            best_model = next_model
+
+    return best_model
+
+
 def compute_metrics(
     classifiers: List[sklearn.base.BaseEstimator],
     x_test: np.ndarray,
@@ -190,7 +229,15 @@ def ovr_select_xgboost() -> Callable:
     return functools.partial(ovr_select, train_xgboost)
 
 
+def ovr_select_xgboost_reg() -> Callable:
+    return functools.partial(ovr_select, train_xgboost_reg)
+
+
 if __name__ == "__main__":
     fire.Fire(
-        {"ovr_log_select": ovr_select_log(), "ovr_xgb_select": ovr_select_xgboost()}
+        {
+            "ovr_log_select": ovr_select_log(),
+            "ovr_xgb_select": ovr_select_xgboost(),
+            "ovr_xgb_reg_select": ovr_select_xgboost_reg(),
+        }
     )
