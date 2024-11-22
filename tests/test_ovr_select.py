@@ -1,10 +1,26 @@
-import pickle
+from typing import Optional
 
+import sklearn.base
+import sklearn.metrics
 import sklearn.linear_model
 import numpy as np
 import pandas as pd
 
-from fisseqtools.ovr_select import ovr_select, compute_metrics
+from fisseqtools.ovr_select import ovr_select, train_log_regression
+
+
+def test_train_log_regression():
+    x_train = np.array([[1, 0, 0]] * 50 + [[0, 1, 0]] * 50).astype(float)
+    y_train = np.array([0] * 50 + [1] * 50)
+    x_eval = np.array([[1, 0, 0]] * 20 + [[0, 1, 0]] * 20).astype(float)
+    y_eval = np.array([0] * 20 + [1] * 20)
+
+    model = train_log_regression(x_train, y_train, x_eval, y_eval)
+    y_probs = model.predict_proba(x_eval)[:, 1].flatten()
+    y_pred = model.predict(x_eval)
+
+    assert sklearn.metrics.roc_auc_score(y_eval, y_probs) == 1.0
+    assert sklearn.metrics.accuracy_score(y_eval, y_pred) == 1.0
 
 
 def test_ovr_select(tmp_path):
@@ -33,8 +49,19 @@ def test_ovr_select(tmp_path):
     np.save(features_file, features)
     output_path.mkdir()
 
+    def train_fun(
+        x_train: np.ndarray,
+        y_train: np.ndarray,
+        x_eval: np.ndarray,
+        y_eval: np.ndarray,
+        sample_weight: Optional[np.ndarray | None] = None,
+    ) -> sklearn.base.BaseEstimator:
+        return sklearn.linear_model.LogisticRegression().fit(
+            x_train, y_train, sample_weight=sample_weight
+        )
+
     ovr_select(
-        base_model=sklearn.linear_model.LogisticRegression,
+        train_fun,
         train_df_path=train_file,
         eval_df_path=eval_file,
         features_path=features_file,
@@ -51,6 +78,7 @@ def test_ovr_select(tmp_path):
     assert predictions_file.exists()
 
     metrics_df = pd.read_csv(metrics_file)
+    print(metrics_df)
     assert "label" in metrics_df.columns
     assert "auc_roc" in metrics_df.columns
     assert "accuracy" in metrics_df.columns

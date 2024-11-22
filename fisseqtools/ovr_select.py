@@ -2,7 +2,7 @@ import functools
 import os
 import pathlib
 import pickle
-from typing import List, Iterable, Tuple, Callable
+from typing import List, Iterable, Tuple, Callable, Optional
 
 import fire
 import sklearn
@@ -19,6 +19,35 @@ from .utils import save_metrics
 
 
 sklearn.set_config(enable_metadata_routing=True)
+
+TrainFun = Callable[
+    [np.ndarray, np.ndarray, np.ndarray, np.ndarray, Optional[np.ndarray | None]],
+    sklearn.base.BaseEstimator,
+]
+
+
+def train_log_regression(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    sample_weight: Optional[np.ndarray | None] = None,
+) -> sklearn.base.BaseEstimator:
+    l1_strengths = [0.1, 0.01, 0.001]
+    max_auc = 0.0
+    classifier = None
+
+    for l1_strength in l1_strengths:
+        next_classifier = sklearn.linear_model.LogisticRegression(C=l1_strength).fit(
+            x_train, y_train, sample_weight=sample_weight
+        )
+        y_probs = next_classifier.predict_proba(x_eval)[:, 1].flatten()
+        roc_auc = sklearn.metrics.roc_auc_score(y_eval, y_probs)
+
+        if roc_auc > max_auc:
+            classifier = next_classifier
+
+    return classifier
 
 
 def compute_metrics(
@@ -39,7 +68,7 @@ def compute_metrics(
 
 
 def ovr_select(
-    base_model: type[sklearn.base.BaseEstimator],
+    train_fun: TrainFun,
     train_df_path: os.PathLike,
     eval_df_path: os.PathLike,
     features_path: os.PathLike,
@@ -73,11 +102,11 @@ def ovr_select(
 
         curr_y_train = np.zeros_like(y_train, dtype=int)
         curr_y_train[y_train == curr_label] = 1
-        weights = sklearn.utils.compute_sample_weight("balanced", curr_y_train)
-        next_classifier = base_model().fit(x_train, curr_y_train, sample_weight=weights)
-
         curr_y_eval = np.zeros_like(y_eval, dtype=int)
         curr_y_eval[y_eval == curr_label] = 1
+        weights = sklearn.utils.compute_sample_weight("balanced", curr_y_train)
+        next_classifier = train_fun(x_train, curr_y_train, x_eval, curr_y_eval, weights)
+
         y_probs = next_classifier.predict_proba(x_eval)[:, 1].flatten()
         y_pred = next_classifier.predict(x_eval)
         roc_auc[curr_label] = sklearn.metrics.roc_auc_score(curr_y_eval, y_probs)
@@ -115,7 +144,7 @@ def ovr_select(
 
 
 def ovr_select_log() -> Callable:
-    return functools.partial(sklearn.linear_model.LogisticRegression)
+    return functools.partial(ovr_select, train_log_regression)
 
 
 if __name__ == "__main__":
