@@ -6,10 +6,24 @@ import sklearn.linear_model
 import numpy as np
 import pandas as pd
 
-from fisseqtools.ovr_select import ovr_select, train_log_regression
+from fisseqtools.ovr_select import ovr_select, train_log_regression, train_xgboost
 
 
 def test_train_log_regression():
+    x_train = np.array([[1, 0, 0]] * 50 + [[0, 1, 0]] * 50).astype(float)
+    y_train = np.array([0] * 50 + [1] * 50)
+    x_eval = np.array([[1, 0, 0]] * 20 + [[0, 1, 0]] * 20).astype(float)
+    y_eval = np.array([0] * 20 + [1] * 20)
+
+    model = train_log_regression(x_train, y_train, x_eval, y_eval)
+    y_probs = model.predict_proba(x_eval)[:, 1].flatten()
+    y_pred = model.predict(x_eval)
+
+    assert sklearn.metrics.roc_auc_score(y_eval, y_probs) == 1.0
+    assert sklearn.metrics.accuracy_score(y_eval, y_pred) == 1.0
+
+
+def test_train_xgboost():
     x_train = np.array([[1, 0, 0]] * 50 + [[0, 1, 0]] * 50).astype(float)
     y_train = np.array([0] * 50 + [1] * 50)
     x_eval = np.array([[1, 0, 0]] * 20 + [[0, 1, 0]] * 20).astype(float)

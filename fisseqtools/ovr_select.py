@@ -9,11 +9,13 @@ import sklearn
 import sklearn.base
 import sklearn.linear_model
 import sklearn.metrics
+import sklearn.model_selection
 import sklearn.multiclass
 import sklearn.preprocessing
 import sklearn.utils
 import numpy as np
 import pandas as pd
+import xgboost as xgb
 
 from .utils import save_metrics
 
@@ -26,30 +28,6 @@ TrainFun = Callable[
 ]
 
 
-def train_log_regression_normalized(
-    x_train: np.ndarray,
-    y_train: np.ndarray,
-    x_eval: np.ndarray,
-    y_eval: np.ndarray,
-    sample_weight: Optional[np.ndarray | None] = None,
-) -> sklearn.base.BaseEstimator:
-    l1_strengths = [1.0, 0.1, 0.01, 0.001]
-    max_auc = 0.0
-    classifier = None
-
-    for l1_strength in l1_strengths:
-        next_classifier = sklearn.linear_model.LogisticRegression(
-            C=l1_strength, penalty="elasticnet", solver="saga", l1_ratio=0.5
-        ).fit(x_train, y_train, sample_weight=sample_weight)
-        y_probs = next_classifier.predict_proba(x_eval)[:, 1].flatten()
-        roc_auc = sklearn.metrics.roc_auc_score(y_eval, y_probs)
-
-        if roc_auc > max_auc:
-            classifier = next_classifier
-
-    return classifier
-
-
 def train_log_regression(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -59,6 +37,29 @@ def train_log_regression(
 ) -> sklearn.base.BaseEstimator:
     return sklearn.linear_model.LogisticRegression().fit(
         x_train, y_train, sample_weight=sample_weight
+    )
+
+
+def train_xgboost(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    sample_weight: Optional[np.ndarray | None] = None,
+) -> sklearn.base.BaseEstimator:
+    return xgb.XGBClassifier(
+        objective="reg:logistic",
+        max_depth=3,
+        colsample_bytree=0.5,
+        colsample_bylevel=0.5,
+        colsample_bynode=0.5,
+    ).fit(
+        x_train,
+        y_train,
+        eval_set=[(x_train, y_train), (x_eval, y_eval)],
+        sample_weight=sample_weight,
+        early_stopping_rounds=5,
+        verbose=True,
     )
 
 
@@ -79,28 +80,13 @@ def compute_metrics(
     )
 
 
-def ovr_select(
+def train_ovr_model(
     train_fun: TrainFun,
-    train_df_path: os.PathLike,
-    eval_df_path: os.PathLike,
-    features_path: os.PathLike,
-    output_path: os.PathLike,
-    select_key: str,
-) -> None:
-    output_path = pathlib.Path(output_path)
-    train_df = pd.read_csv(train_df_path)
-    eval_df = pd.read_csv(eval_df_path)
-    features = np.load(features_path)
-
-    x_train = features[train_df["index"]]
-    x_eval = features[eval_df["index"]]
-
-    labels = train_df[select_key]
-    label_encoder = sklearn.preprocessing.LabelEncoder()
-    label_encoder.fit(labels)
-    y_train = label_encoder.transform(train_df[select_key])
-    y_eval = label_encoder.transform(eval_df[select_key])
-
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+) -> Tuple[List[sklearn.base.BaseEstimator], np.ndarray, np.ndarray]:
     unique_labels = np.unique(y_train)
     classifiers = []
     roc_auc = np.empty_like(unique_labels, dtype=float)
@@ -127,8 +113,42 @@ def ovr_select(
         train_roc_auc = sklearn.metrics.roc_auc_score(curr_y_train, y_probs_train)
         classifiers.append(next_classifier)
 
-        print(f"    Label {curr_label} ROC-AUC: {roc_auc[curr_label]}", flush=True)
-        print(f"    Label {curr_label} ROC-AUC (Train): {train_roc_auc}", flush=True)
+        print(f"Label {curr_label} ROC-AUC: {roc_auc[curr_label]}", flush=True)
+        print(f"Label {curr_label} ROC-AUC (Train): {train_roc_auc}", flush=True)
+        print("", flush=True)
+
+    return classifiers, roc_auc, accuracy
+
+
+def ovr_select(
+    train_fun: TrainFun,
+    train_df_path: os.PathLike,
+    eval_df_path: os.PathLike,
+    features_path: os.PathLike,
+    output_path: os.PathLike,
+    select_key: str,
+) -> float:
+    output_path = pathlib.Path(output_path)
+    train_df = pd.read_csv(train_df_path)
+    eval_df = pd.read_csv(eval_df_path)
+    features = np.load(features_path)
+
+    x_train = features[train_df["index"]]
+    x_eval = features[eval_df["index"]]
+
+    labels = train_df[select_key]
+    label_encoder = sklearn.preprocessing.LabelEncoder()
+    label_encoder.fit(labels)
+    y_train = label_encoder.transform(train_df[select_key])
+    y_eval = label_encoder.transform(eval_df[select_key])
+
+    classifiers, roc_auc, accuracy = train_ovr_model(
+        train_fun,
+        x_train,
+        y_train,
+        x_eval,
+        y_eval,
+    )
 
     with open(output_path / "ovr_model.pkl", "wb") as f:
         pickle.dump(classifiers, f)
@@ -156,10 +176,18 @@ def ovr_select(
         label_pred,
     )
 
+    return roc_auc.mean()
+
 
 def ovr_select_log() -> Callable:
     return functools.partial(ovr_select, train_log_regression)
 
 
+def ovr_select_xgboost() -> Callable:
+    return functools.partial(ovr_select, train_xgboost)
+
+
 if __name__ == "__main__":
-    fire.Fire({"ovr_log_select": ovr_select_log()})
+    fire.Fire(
+        {"ovr_log_select": ovr_select_log(), "ovr_xgb_select": ovr_select_xgboost()}
+    )
