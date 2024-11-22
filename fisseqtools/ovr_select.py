@@ -48,17 +48,20 @@ def train_xgboost(
     sample_weight: Optional[np.ndarray | None] = None,
 ) -> sklearn.base.BaseEstimator:
     return xgb.XGBClassifier(
-        objective="reg:logistic",
-        max_depth=3,
+        objective="binary:logistic",
+        max_depth=1,
         colsample_bytree=0.5,
         colsample_bylevel=0.5,
         colsample_bynode=0.5,
+        reg_lambda=5,
+        early_stopping_rounds=10,
+        n_estimators=100,
+        eval_metric="auc",
     ).fit(
         x_train,
         y_train,
         eval_set=[(x_train, y_train), (x_eval, y_eval)],
         sample_weight=sample_weight,
-        early_stopping_rounds=5,
         verbose=True,
     )
 
