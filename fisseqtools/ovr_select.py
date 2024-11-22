@@ -62,8 +62,8 @@ def ovr_select(
 
     unique_labels = np.unique(y_train)
     classifiers = []
-    roc_auc = np.empty_like(unique_labels)
-    accuracy = np.empty_like(unique_labels)
+    roc_auc = np.empty_like(unique_labels, dtype=float)
+    accuracy = np.empty_like(unique_labels, dtype=float)
 
     for curr_label in np.unique(y_train):
         print(
@@ -82,10 +82,17 @@ def ovr_select(
         y_pred = next_classifier.predict(x_eval)
         roc_auc[curr_label] = sklearn.metrics.roc_auc_score(curr_y_eval, y_probs)
         accuracy[curr_label] = sklearn.metrics.accuracy_score(curr_y_eval, y_pred)
+        
+        y_probs_train = next_classifier.predict_proba(x_train)[:, 1].flatten()
+        y_pred_train = next_classifier.predict(x_train)
+        train_roc_auc = sklearn.metrics.roc_auc_score(curr_y_train, y_probs_train)
+        train_accuracy = sklearn.metrics.roc_auc_score(curr_y_train, y_pred_train)
         classifiers.append(next_classifier)
 
         print(f"    Label {curr_label} accuracy: {accuracy[curr_label]}", flush=True)
+        print(f"    Label {curr_label} accuracy (Train): {train_accuracy}", flush=True)
         print(f"    Label {curr_label} ROC-AUC: {roc_auc[curr_label]}", flush=True)
+        print(f"    Label {curr_label} ROC-AUC (Train): {train_roc_auc}", flush=True)
 
     with open(output_path / "ovr_model.pkl", "wb") as f:
         pickle.dump(classifiers, f)
@@ -115,7 +122,7 @@ def ovr_select(
 
 
 def ovr_select_log() -> Callable:
-    return functools.partial(sklearn.linear_model.LogisticRegression)
+    return functools.partial(ovr_select, sklearn.linear_model.LogisticRegression)
 
 
 if __name__ == "__main__":
