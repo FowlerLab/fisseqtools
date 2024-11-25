@@ -76,16 +76,17 @@ def train_xgboost_reg(
     lambda_values = [1, 5, 10]
     best_score = 0.00
     best_model = None
+    best_lambda = -1
 
     for lambda_value in lambda_values:
-        print(f"Testing lambda value: {lambda_value}")
+        print(f"Testing lambda value: {lambda_value}", flush=True)
         next_model = xgb.XGBClassifier(
             objective="binary:logistic",
             max_depth=1,
             colsample_bytree=0.5,
             colsample_bylevel=0.5,
             colsample_bynode=0.5,
-            reg_lambda=5,
+            reg_lambda=lambda_value,
             early_stopping_rounds=10,
             n_estimators=100,
             eval_metric="auc",
@@ -101,7 +102,9 @@ def train_xgboost_reg(
         if curr_score > best_score:
             best_score = curr_score
             best_model = next_model
+            best_lambda = lambda_value
 
+    print(f"Best lambda value: {best_lambda}", flush=True)
     return best_model
 
 
