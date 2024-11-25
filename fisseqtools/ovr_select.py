@@ -76,7 +76,7 @@ def train_xgboost_reg(
     sample_weight: Optional[np.ndarray | None] = None,
     max_depth: int = 1,
 ) -> sklearn.base.BaseEstimator:
-    lambda_values = [1, 5, 10]
+    lambda_values = [0.1, 1, 5, 10]
     best_score = 0.00
     best_model = None
 
