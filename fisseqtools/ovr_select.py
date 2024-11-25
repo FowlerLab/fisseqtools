@@ -1,8 +1,10 @@
 import functools
+import json
 import os
 import pathlib
 import pickle
-from typing import List, Iterable, Tuple, Callable, Optional
+import random
+from typing import Any, List, Iterable, Tuple, Callable, Optional, Dict
 
 import fire
 import sklearn
@@ -67,6 +69,7 @@ def train_xgboost(
 
 
 def train_xgboost_reg(
+    max_depth: int,
     x_train: np.ndarray,
     y_train: np.ndarray,
     x_eval: np.ndarray,
@@ -81,12 +84,12 @@ def train_xgboost_reg(
         print(f"Testing lambda value: {lambda_value}")
         next_model = xgb.XGBClassifier(
             objective="binary:logistic",
-            max_depth=1,
+            max_depth=max_depth,
             colsample_bytree=0.5,
             colsample_bylevel=0.5,
             colsample_bynode=0.5,
-            reg_lambda=5,
-            early_stopping_rounds=10,
+            reg_lambda=lambda_value,
+            early_stopping_rounds=5,
             n_estimators=100,
             eval_metric="auc",
         ).fit(
@@ -219,6 +222,58 @@ def ovr_select(
     )
 
     return roc_auc.mean()
+
+
+def over_hyperparam_search(
+    train_fun: TrainFun,
+    param_grid: Dict[str, List[Any]],
+    train_df_path: os.PathLike,
+    eval_df_path: os.PathLike,
+    features_path: os.PathLike,
+    output_path: os.PathLike,
+    select_key: str,
+    class_sample: int = 10,
+) -> Dict[str, Any]:
+    train_df = pd.read_csv(train_df_path)
+    eval_df = pd.read_csv(eval_df_path)
+    output_path = pathlib.Path(output_path)
+    unique_values = train_df[select_key].unique()
+    selected_classes = random.sample(list(unique_values), class_sample)
+
+    filtered_train_df_path = output_path / "filtered_train.csv"
+    filtered_eval_df_path = output_path / "filtered_eval.csv"
+    train_df[train_df[select_key].isin(selected_classes)].to_csv(
+        filtered_train_df_path, index=False
+    )
+    eval_df[eval_df[select_key].isin(selected_classes)].to_csv(
+        filtered_eval_df_path, index=False
+    )
+
+    best_auc_roc = (0.0,)
+    best_params = None
+
+    for i, params in enumerate(sklearn.model_selection.ParameterGrid(param_grid)):
+        next_train_fun = functools.partial(train_fun, **params)
+        next_output_path = output_path / f"trial_{i + 1}"
+        next_output_path.mkdir()
+
+        mean_auc_roc = ovr_select(
+            next_train_fun,
+            filtered_train_df_path,
+            filtered_eval_df_path,
+            features_path,
+            next_output_path,
+            select_key,
+        )
+
+        if mean_auc_roc > best_auc_roc:
+            best_auc_roc = mean_auc_roc
+            best_params = params
+
+    with open(output_path / "best_params.json", "w") as f:
+        json.dump(best_params, f, indent=2)
+
+    return best_params
 
 
 def ovr_select_log() -> Callable:

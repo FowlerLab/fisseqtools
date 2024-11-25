@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 
 import sklearn.base
@@ -8,6 +9,7 @@ import pandas as pd
 
 from fisseqtools.ovr_select import (
     ovr_select,
+    over_hyperparam_search,
     train_log_regression,
     train_xgboost,
     train_xgboost_reg,
@@ -122,3 +124,71 @@ def test_ovr_select(tmp_path):
 
     assert all(metrics_df["auc_roc"] == 1.0)
     assert all(metrics_df["accuracy"] == 1.0)
+
+
+def test_over_hyperparam_search(tmp_path):
+    train_df = pd.DataFrame(
+        {
+            "label": ["A"] * 50 + ["B"] * 50 + ["C"] * 50,
+            "index": [0] * 50 + [1] * 50 + [2] * 50,
+        }
+    )
+    eval_df = pd.DataFrame(
+        {
+            "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
+            "index": [0] * 20 + [1] * 20 + [2] * 20,
+        }
+    )
+    features = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]]).astype(float)
+    train_file = tmp_path / "train.csv"
+    eval_file = tmp_path / "eval.csv"
+    features_file = tmp_path / "features.npy"
+    output_path = tmp_path / "output"
+
+    # Save input data
+    train_df.to_csv(train_file, index=False)
+    eval_df.to_csv(eval_file, index=False)
+    np.save(features_file, features)
+    output_path.mkdir()
+
+    param_grid = {
+        "C": [0.1, 1, 10],
+        "penalty": ["l2"],
+    }
+
+    def train_fun(
+        x_train: np.ndarray,
+        y_train: np.ndarray,
+        x_eval: np.ndarray,
+        y_eval: np.ndarray,
+        sample_weight: Optional[np.ndarray | None] = None,
+        C: float = 1.0,
+        penalty: str = "l1",
+    ) -> sklearn.base.BaseEstimator:
+        return sklearn.linear_model.LogisticRegression(C=C, penalty=penalty).fit(
+            x_train, y_train, sample_weight=sample_weight
+        )
+
+    best_params = over_hyperparam_search(
+        train_fun=train_fun,
+        param_grid=param_grid,
+        train_df_path=train_file,
+        eval_df_path=eval_file,
+        features_path=features_file,
+        output_path=output_path,
+        select_key="label",
+        class_sample=2,
+    )
+
+    assert isinstance(best_params, dict)
+    assert "C" in best_params
+    assert best_params["C"] in param_grid["C"]
+    assert best_params["penalty"] == "l2"
+
+    best_params_file = output_path / "best_params.json"
+    assert best_params_file.exists()
+
+    with open(best_params_file, "r") as f:
+        saved_params = json.load(f)
+
+    assert saved_params == best_params
