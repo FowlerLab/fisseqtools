@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sklearn.decomposition
 import sklearn.model_selection
+import sklearn.preprocessing
 
 
 def filter_labels(
@@ -59,13 +60,16 @@ def generate_splits(
 def compute_pca(
     features: np.ndarray, n_components: int
 ) -> Tuple[np.ndarray, float, float, float]:
+    standard_scalar = sklearn.preprocessing.StandardScaler()
+    normalized_features = standard_scalar.fit_transform(features)
+
     pca = sklearn.decomposition.PCA(n_components=n_components)
-    pca = pca.fit(features)
-    reduced_features = pca.transform(features)
+    pca = pca.fit(normalized_features)
+    reduced_features = pca.transform(normalized_features)
     reconstructed_features = pca.inverse_transform(reduced_features)
-    reconstruction_diff = features - reconstructed_features
+    reconstruction_diff = normalized_features - reconstructed_features
     reconstruction_error = np.linalg.norm(reconstruction_diff, axis=0) / np.linalg.norm(
-        features, axis=0
+        normalized_features, axis=0
     )
 
     return (
