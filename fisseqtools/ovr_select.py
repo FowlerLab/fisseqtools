@@ -69,12 +69,12 @@ def train_xgboost(
 
 
 def train_xgboost_reg(
-    max_depth: int,
     x_train: np.ndarray,
     y_train: np.ndarray,
     x_eval: np.ndarray,
     y_eval: np.ndarray,
     sample_weight: Optional[np.ndarray | None] = None,
+    max_depth: int = 1,
 ) -> sklearn.base.BaseEstimator:
     lambda_values = [1, 5, 10]
     best_score = 0.00
@@ -224,7 +224,7 @@ def ovr_select(
     return roc_auc.mean()
 
 
-def over_hyperparam_search(
+def ovr_hyperparam_search(
     train_fun: TrainFun,
     param_grid: Dict[str, List[Any]],
     train_df_path: os.PathLike,
@@ -288,11 +288,18 @@ def ovr_select_xgboost_reg() -> Callable:
     return functools.partial(ovr_select, train_xgboost_reg)
 
 
+def ovr_xgb_search_height() -> Callable:
+    return functools.partial(
+        ovr_hyperparam_search, train_xgboost_reg, {"max_depth": [1, 3, 6]}
+    )
+
+
 if __name__ == "__main__":
     fire.Fire(
         {
             "ovr_log_select": ovr_select_log(),
             "ovr_xgb_select": ovr_select_xgboost(),
             "ovr_xgb_reg_select": ovr_select_xgboost_reg(),
+            "ovr_xgb_hparams": ovr_xgb_search_height(),
         }
     )
