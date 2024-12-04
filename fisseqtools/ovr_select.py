@@ -73,47 +73,16 @@ def train_xgboost_reg(
     x_eval: np.ndarray,
     y_eval: np.ndarray,
     sample_weight: Optional[np.ndarray | None] = None,
+    max_depth: int = 1,
 ) -> sklearn.base.BaseEstimator:
     lambda_values = [0.1, 1, 5, 10]
-    tree_heights = [1, 3]
     best_score = 0.00
-    best_tree_height = -1
-    
-    
-    for tree_height in tree_heights:
-        print(f"Testing tree height: {tree_height}")
-        next_model = xgb.XGBClassifier(
-            objective="binary:logistic",
-            max_depth=tree_height,
-            colsample_bytree=0.5,
-            colsample_bylevel=0.5,
-            colsample_bynode=0.5,
-            early_stopping_rounds=5,
-            n_estimators=100,
-            eval_metric="auc",
-        ).fit(
-            x_train,
-            y_train,
-            eval_set=[(x_train, y_train), (x_eval, y_eval)],
-            sample_weight=sample_weight,
-            verbose=True,
-        )
-        
-        curr_score = next_model.best_score
-        if curr_score > best_score:
-            best_score = curr_score
-            best_tree_height = tree_height
-        
-    print(f"Best tree height: {best_tree_height}", flush=True)
-    best_score = 0.0
-    best_model = None
-    best_lambda = -1
 
     for lambda_value in lambda_values:
         print(f"Testing lambda value: {lambda_value}", flush=True)
         next_model = xgb.XGBClassifier(
             objective="binary:logistic",
-            max_depth=best_tree_height,
+            max_depth=max_depth,
             colsample_bytree=0.5,
             colsample_bylevel=0.5,
             colsample_bynode=0.5,
