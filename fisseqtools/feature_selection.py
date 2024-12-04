@@ -7,9 +7,9 @@ import pickle
 from typing import Dict
 
 import fire
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.cluster.hierarchy
@@ -17,8 +17,8 @@ import scipy.sparse
 import scipy.spatial.distance
 import scipy.stats
 import sklearn.feature_selection
-import sklearn.preprocessing
 import sklearn.model_selection
+import sklearn.preprocessing
 import tqdm
 
 

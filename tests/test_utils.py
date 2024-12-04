@@ -5,12 +5,12 @@ import pandas as pd
 import pytest
 
 from fisseqtools.utils import (
-    filter_labels,
-    split_data,
-    generate_splits,
     compute_pca,
+    filter_labels,
+    generate_splits,
     get_pca,
     save_metrics,
+    split_data,
 )
 
 

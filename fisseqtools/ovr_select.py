@@ -4,9 +4,11 @@ import os
 import pathlib
 import pickle
 import random
-from typing import Any, List, Iterable, Tuple, Callable, Optional, Dict
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 import fire
+import numpy as np
+import pandas as pd
 import sklearn
 import sklearn.base
 import sklearn.linear_model
@@ -15,12 +17,9 @@ import sklearn.model_selection
 import sklearn.multiclass
 import sklearn.preprocessing
 import sklearn.utils
-import numpy as np
-import pandas as pd
 import xgboost as xgb
 
 from .utils import save_metrics
-
 
 sklearn.set_config(enable_metadata_routing=True)
 
@@ -249,7 +248,7 @@ def ovr_hyperparam_search(
         filtered_eval_df_path, index=False
     )
 
-    best_auc_roc = (0.0,)
+    best_auc_roc = 0.0
     best_params = None
 
     for i, params in enumerate(sklearn.model_selection.ParameterGrid(param_grid)):

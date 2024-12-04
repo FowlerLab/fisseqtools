@@ -1,15 +1,15 @@
 import json
 import pickle
 
-import pytest
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 from sklearn.preprocessing import LabelEncoder
 
 from fisseqtools.xgboost_select import (
     compute_metrics,
-    xgboost_select,
     search_hyperparams,
+    xgboost_select,
 )
 
 

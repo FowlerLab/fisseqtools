@@ -1,18 +1,18 @@
 import json
 from typing import Optional
 
-import sklearn.base
-import sklearn.metrics
-import sklearn.linear_model
 import numpy as np
 import pandas as pd
+import sklearn.base
+import sklearn.linear_model
+import sklearn.metrics
 
 from fisseqtools.ovr_select import (
+    ovr_hyperparam_search,
     ovr_select,
     ovr_select_log,
     ovr_select_xgboost,
     ovr_select_xgboost_reg,
-    ovr_hyperparam_search,
     ovr_xgb_search_height,
     train_log_regression,
     train_xgboost,

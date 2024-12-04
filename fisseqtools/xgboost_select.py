@@ -2,7 +2,7 @@ import json
 import os
 import pathlib
 import pickle
-from typing import Tuple, Iterable, Optional
+from typing import Iterable, Optional, Tuple
 
 import fire
 import numpy as np

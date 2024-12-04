@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Tuple, Optional, Iterable
+from typing import Iterable, Optional, Tuple
 
 import fire
 import numpy as np
@@ -94,6 +94,20 @@ def get_pca(
     np.save(pca_path, reduced_features)
 
 
+def save_metrics_no_prediction(
+    data_df: pd.DataFrame,
+    auc_roc_series: pd.Series,
+    accuracy_series: pd.Series,
+    select_key: str,
+    output_path: pathlib.Path,
+) -> None:
+    metrics_df = pd.DataFrame({"label": data_df[select_key].unique()})
+    metrics_df["auc_roc"] = metrics_df["label"].map(auc_roc_series)
+    metrics_df["accuracy"] = metrics_df["label"].map(accuracy_series)
+    metrics_df.to_csv(output_path / "metrics.csv", index=False)
+    metrics_df = metrics_df.sort_values(by="auc_roc", ascending=False)
+
+
 def save_metrics(
     data_df: pd.DataFrame,
     auc_roc_series: pd.Series,
@@ -103,11 +117,9 @@ def save_metrics(
     label_true: Iterable[str],
     label_pred: Iterable[str],
 ) -> None:
-    metrics_df = pd.DataFrame({"label": data_df[select_key].unique()})
-    metrics_df["auc_roc"] = metrics_df["label"].map(auc_roc_series)
-    metrics_df["accuracy"] = metrics_df["label"].map(accuracy_series)
-    metrics_df.to_csv(output_path / "metrics.csv", index=False)
-    metrics_df = metrics_df.sort_values(by="auc_roc", ascending=False)
+    save_metrics_no_prediction(
+        data_df, auc_roc_series, accuracy_series, select_key, output_path
+    )
     pd.DataFrame({"true_label": label_true, "label_predicted": label_pred}).to_csv(
         output_path / "predictions.csv"
     )
