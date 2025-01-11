@@ -1,5 +1,5 @@
-import math
 import json
+import math
 import pathlib
 from os import PathLike
 
@@ -35,7 +35,10 @@ def filter_stratify_replicates(
     """
     r1_df = r1_df.reset_index(drop=True)
     r2_df = r2_df.reset_index(drop=True)
-    
+
+    print(r1_df.index.min(), r1_df.index.max())
+    print(r2_df.index.min(), r2_df.index.max())
+
     r1_aa_counts = r1_df["aaChanges"].value_counts()
     r2_aa_counts = r2_df["aaChanges"].value_counts()
     r1_aa_counts = r1_aa_counts[r1_aa_counts >= math.ceil(min_count / 2)]
@@ -123,7 +126,7 @@ def get_splits(
         stratify_replicates (bool, optional):
             If True, stratifies the filtering process to balance replicates.
         min_count (int, optional):
-            Minimum combined count for `aaChanges` to be included. 
+            Minimum combined count for `aaChanges` to be included.
     """
     output_dir = pathlib.Path(output_dir)
     r1_df = pd.read_parquet(r1_parquet_path)

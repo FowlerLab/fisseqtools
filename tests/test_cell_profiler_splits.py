@@ -1,18 +1,25 @@
 import pandas as pd
 
 from fisseqtools.cell_profiler_splits import (
-    filter_stratify_replicates, filter_no_stratify, get_splits
+    filter_no_stratify,
+    filter_stratify_replicates,
+    get_splits,
 )
 
+
 def test_filter_funs():
-    r1_df = pd.DataFrame({
-        "aaChanges": ["A"] * 3 + ["B"] * 2 + ["C"] * 1 + ["D"] * 4,
-        "value": list(range(10)),
-    })
-    r2_df = pd.DataFrame({
-        "aaChanges": ["A"] * 2 + ["B"] * 3 + ["C"] * 1 + ["E"] * 1,
-        "value": list(range(10, 17))
-    })
+    r1_df = pd.DataFrame(
+        {
+            "aaChanges": ["A"] * 3 + ["B"] * 2 + ["C"] * 1 + ["D"] * 4,
+            "value": list(range(10)),
+        }
+    )
+    r2_df = pd.DataFrame(
+        {
+            "aaChanges": ["A"] * 2 + ["B"] * 3 + ["C"] * 1 + ["E"] * 1,
+            "value": list(range(10, 17)),
+        }
+    )
 
     result = filter_stratify_replicates(r1_df, r2_df, min_count=2)
     counts = result["aaChanges"].value_counts()
@@ -32,14 +39,12 @@ def test_filter_funs():
 
 
 def test_get_splits(tmp_path):
-    r1_data = pd.DataFrame({
-        "aaChanges": ["A"] * 5 + ["B"] * 5 + ["C"] * 1,
-        "value": list(range(11))
-    })
-    r2_data = pd.DataFrame({
-        "aaChanges": ["A"] * 5 + ["B"] * 5 + ["C"] * 1,
-        "value": list(range(11, 22))
-    })
+    r1_data = pd.DataFrame(
+        {"aaChanges": ["A"] * 5 + ["B"] * 5 + ["C"] * 1, "value": list(range(11))}
+    )
+    r2_data = pd.DataFrame(
+        {"aaChanges": ["A"] * 5 + ["B"] * 5 + ["C"] * 1, "value": list(range(11, 22))}
+    )
 
     # Save to Parquet files
     r1_path = tmp_path / "r1.parquet"
@@ -54,14 +59,14 @@ def test_get_splits(tmp_path):
         r2_parquet_path=r2_path,
         output_dir=splits_path,
         stratify_replicates=False,
-        min_count=3
+        min_count=3,
     )
 
     assert (splits_path / "train.parquet").exists()
     assert (splits_path / "eval_one.parquet").exists()
     assert (splits_path / "eval_two.parquet").exists()
     assert (splits_path / "test.parquet").exists()
-    
+
     train = pd.read_parquet(splits_path / "train.parquet")
     eval_one = pd.read_parquet(splits_path / "eval_one.parquet")
     eval_two = pd.read_parquet(splits_path / "eval_two.parquet")
@@ -85,14 +90,14 @@ def test_get_splits(tmp_path):
         r2_parquet_path=r2_path,
         output_dir=splits_path,
         stratify_replicates=True,
-        min_count=3
+        min_count=3,
     )
 
     assert (splits_path / "train.parquet").exists()
     assert (splits_path / "eval_one.parquet").exists()
     assert (splits_path / "eval_two.parquet").exists()
     assert (splits_path / "test.parquet").exists()
-    
+
     train = pd.read_parquet(splits_path / "train.parquet")
     eval_one = pd.read_parquet(splits_path / "eval_one.parquet")
     eval_two = pd.read_parquet(splits_path / "eval_two.parquet")

@@ -2,7 +2,7 @@ import functools
 import os
 import pathlib
 import pickle
-from typing import List, Tuple, Callable
+from typing import Callable, List, Tuple
 
 import fire
 import numpy as np
@@ -16,8 +16,8 @@ import sklearn.multiclass
 import sklearn.preprocessing
 import sklearn.utils
 
-from .ovr_select import TrainFun, compute_metrics, train_xgboost_reg
 from ..utils import save_metrics_no_prediction
+from .ovr_select import TrainFun, compute_metrics, train_xgboost_reg
 
 
 def train_ovwt_model(
