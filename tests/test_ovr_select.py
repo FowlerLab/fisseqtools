@@ -7,7 +7,7 @@ import sklearn.base
 import sklearn.linear_model
 import sklearn.metrics
 
-from fisseqtools.ovr_select import (
+from fisseqtools.archive.ovr_select import (
     ovr_hyperparam_search,
     ovr_select,
     ovr_select_log,

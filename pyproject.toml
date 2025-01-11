@@ -20,13 +20,15 @@ classifiers = [
 requires-python = ">=3.8"
 
 dependencies = [
-    "numpy",
-    "torch",
-    "tifffile",
     "fire",
+    "matplotlib",
+    "numpy",
     "pandas",
-    "scikit-learn",
+    "scikit_learn",
+    "scipy",
+    "tqdm",
     "xgboost",
+    "pyarrow",
 ]
 
 [project.optional-dependencies]

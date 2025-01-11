@@ -19,7 +19,7 @@ import sklearn.preprocessing
 import sklearn.utils
 import xgboost as xgb
 
-from .utils import save_metrics
+from ..utils import save_metrics
 
 sklearn.set_config(enable_metadata_routing=True)
 

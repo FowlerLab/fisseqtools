@@ -6,7 +6,7 @@ import sklearn.base
 import sklearn.linear_model
 import sklearn.metrics
 
-from fisseqtools.ovwt_select import ovwt_select, ovwt_select_xgboost_reg
+from fisseqtools.archive.ovwt_select import ovwt_select, ovwt_select_xgboost_reg
 
 
 def test_ovr_select(tmp_path):

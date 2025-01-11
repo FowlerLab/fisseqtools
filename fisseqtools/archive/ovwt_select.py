@@ -17,7 +17,7 @@ import sklearn.preprocessing
 import sklearn.utils
 
 from .ovr_select import TrainFun, compute_metrics, train_xgboost_reg
-from .utils import save_metrics_no_prediction
+from ..utils import save_metrics_no_prediction
 
 
 def train_ovwt_model(
