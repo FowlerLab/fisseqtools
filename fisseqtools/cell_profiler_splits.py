@@ -33,6 +33,9 @@ def filter_stratify_replicates(
     Returns:
         pd.DataFrame
     """
+    r1_df = r1_df.reset_index(drop=True)
+    r2_df = r2_df.reset_index(drop=True)
+    
     r1_aa_counts = r1_df["aaChanges"].value_counts()
     r2_aa_counts = r2_df["aaChanges"].value_counts()
     r1_aa_counts = r1_aa_counts[r1_aa_counts >= math.ceil(min_count / 2)]
@@ -83,6 +86,9 @@ def filter_no_stratify(
     Returns:
         pd.DataFrame
     """
+    r1_df = r1_df.reset_index(drop=True)
+    r2_df = r2_df.reset_index(drop=True)
+
     r1_aa_counts = r1_df["aaChanges"].value_counts()
     r2_aa_counts = r2_df["aaChanges"].value_counts()
     common_aas = r1_aa_counts.index.intersection(r2_aa_counts.index)
