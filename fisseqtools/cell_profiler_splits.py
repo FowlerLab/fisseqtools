@@ -36,9 +36,6 @@ def filter_stratify_replicates(
     r1_df = r1_df.reset_index(drop=True)
     r2_df = r2_df.reset_index(drop=True)
 
-    print(r1_df.index.min(), r1_df.index.max())
-    print(r2_df.index.min(), r2_df.index.max())
-
     r1_aa_counts = r1_df["aaChanges"].value_counts()
     r2_aa_counts = r2_df["aaChanges"].value_counts()
     r1_aa_counts = r1_aa_counts[r1_aa_counts >= math.ceil(min_count / 2)]
@@ -47,21 +44,25 @@ def filter_stratify_replicates(
 
     r1_mask = np.zeros(len(r1_df), dtype=bool)
     r2_mask = np.zeros(len(r2_df), dtype=bool)
-    r1_data_mask = (r1_df, r1_mask)
-    r2_data_mask = (r2_df, r2_mask)
+    r1_index = np.arange(len(r1_df), dtype=int)
+    r2_index = np.arange(len(r2_df), dtype=int)
+    r1_data_mask_index = (r1_df, r1_mask, r1_index)
+    r2_data_mask_index = (r2_df, r2_mask, r2_index)
 
     for cur_aa in common_aas:
         if r1_aa_counts[cur_aa] > r2_aa_counts[cur_aa]:
-            small_df, small_mask = r2_data_mask
-            large_df, large_mask = r1_data_mask
+            small_df, small_mask, small_index = r2_data_mask_index
+            large_df, large_mask, large_index = r1_data_mask_index
             sample_n = r2_aa_counts[cur_aa]
         else:
-            small_df, small_mask = r1_data_mask
-            large_df, large_mask = r2_data_mask
+            small_df, small_mask, small_index = r1_data_mask_index
+            large_df, large_mask, large_index = r2_data_mask_index
             sample_n = r1_aa_counts[cur_aa]
 
-        small_rows = small_df[small_df["aaChanges"] == cur_aa].index.to_numpy()
-        large_rows = large_df[large_df["aaChanges"] == cur_aa].index.to_numpy()
+        small_rows = (small_df["aaChanges"] == cur_aa).to_numpy()
+        small_rows = small_index[small_rows]
+        large_rows = (large_df["aaChanges"] == cur_aa).to_numpy()
+        large_rows = large_index[large_rows]
         large_rows = random_state.choice(large_rows, size=sample_n, replace=False)
         small_mask[small_rows] = True
         large_mask[large_rows] = True
