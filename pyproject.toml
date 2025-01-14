@@ -29,6 +29,7 @@ dependencies = [
     "tqdm",
     "xgboost",
     "pyarrow",
+    "shap",
 ]
 
 [project.optional-dependencies]
