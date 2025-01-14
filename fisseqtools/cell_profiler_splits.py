@@ -11,6 +11,13 @@ import sklearn.model_selection
 random_state = np.random.RandomState(seed=42)
 
 
+def filter_non_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop non-numerical columns except `aaChanges`"""
+    num_columns = df.select_dtypes(include=["number"]).columns
+    columns = ["aaChanges"] + list(num_columns)
+    return df[columns]
+
+
 def filter_stratify_replicates(
     r1_df: pd.DataFrame,
     r2_df: pd.DataFrame,
@@ -51,23 +58,23 @@ def filter_stratify_replicates(
 
     for cur_aa in common_aas:
         if r1_aa_counts[cur_aa] > r2_aa_counts[cur_aa]:
-            small_df, small_mask, small_index = r2_data_mask_index
+            small_df, small_mask, _ = r2_data_mask_index
             large_df, large_mask, large_index = r1_data_mask_index
             sample_n = r2_aa_counts[cur_aa]
         else:
-            small_df, small_mask, small_index = r1_data_mask_index
+            small_df, small_mask, _ = r1_data_mask_index
             large_df, large_mask, large_index = r2_data_mask_index
             sample_n = r1_aa_counts[cur_aa]
 
-        small_rows = (small_df["aaChanges"] == cur_aa).to_numpy()
-        small_rows = small_index[small_rows]
         large_rows = (large_df["aaChanges"] == cur_aa).to_numpy()
         large_rows = large_index[large_rows]
         large_rows = random_state.choice(large_rows, size=sample_n, replace=False)
-        small_mask[small_rows] = True
         large_mask[large_rows] = True
 
-    return pd.concat((r1_df[r1_mask], r2_df[r2_mask]))
+        small_rows_mask = small_df["aaChanges"] == cur_aa
+        small_mask[small_rows_mask.to_numpy()] = True
+
+    return filter_non_numeric(pd.concat((r1_df[r1_mask], r2_df[r2_mask])))
 
 
 def filter_no_stratify(
@@ -101,7 +108,7 @@ def filter_no_stratify(
 
     r1_df = r1_df[r1_df["aaChanges"].isin(combined_aa_counts.index)]
     r2_df = r2_df[r2_df["aaChanges"].isin(combined_aa_counts.index)]
-    return pd.concat((r1_df, r2_df))
+    return filter_non_numeric(pd.concat((r1_df, r2_df)))
 
 
 def get_splits(

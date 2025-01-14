@@ -92,7 +92,7 @@ def get_mask_features(
             matrix.
     """
     wt_mask = (curr_split[target_column] == wt_key).to_numpy(dtype=bool)
-    feature_matrix = curr_split[feature_columns].to_numpy()
+    feature_matrix = curr_split[feature_columns].to_numpy(dtype=np.float64)
     return wt_mask, feature_matrix
 
 

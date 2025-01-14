@@ -59,6 +59,8 @@ def test_get_mask_features():
 
     assert np.array_equal(wt_mask, train_df["index"].to_numpy(dtype=bool))
     assert np.array_equal(feature_matrix, train_df["index"].to_numpy().reshape((-1, 1)))
+    assert wt_mask.dtype == np.bool
+    assert feature_matrix.dtype == np.float64
 
 
 def test_get_train_data_labels():
