@@ -29,6 +29,25 @@ def train_xgboost(
     y_eval: np.ndarray,
     sample_weight: Optional[np.ndarray | None] = None,
 ) -> sklearn.base.BaseEstimator:
+    """
+    Trains an XGBoost classifier on the provided training data.
+
+    Args:
+        x_train (np.ndarray):
+            Feature matrix for training data.
+        y_train (np.ndarray):
+            Labels for training data.
+        x_eval (np.ndarray):
+            Feature matrix for evaluation data.
+        y_eval (np.ndarray):
+            Labels for evaluation data.
+        sample_weight (Optional[np.ndarray | None], optional):
+            Sample weights for training, default is None.
+
+    Returns:
+        sklearn.base.BaseEstimator:
+            The trained XGBoost classifier.
+    """
     return xgb.XGBClassifier(
         objective="binary:logistic",
         max_depth=3,
@@ -53,7 +72,25 @@ def get_mask_features(
     wt_key: str,
     curr_split: pd.DataFrame,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    wt_mask = (curr_split[target_column] == wt_key).to_numpy()
+    """
+    Generates a mask for the wild-type entries and extracts the feature matrix.
+
+    Args:
+        target_column (str):
+            The name of the target column.
+        feature_columns (List[str]):
+            List of feature column names.
+        wt_key (str):
+            The wild-type key to identify the wild-type entries.
+        curr_split (pd.DataFrame):
+            The dataset split to be processed.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]:
+            A tuple containing the wild-type mask (wt_mask) and the feature
+            matrix.
+    """
+    wt_mask = (curr_split[target_column] == wt_key).to_numpy(dtype=bool)
     feature_matrix = curr_split[feature_columns].to_numpy()
     return wt_mask, feature_matrix
 
@@ -63,6 +100,23 @@ def get_train_data_labels(
     variant_mask: np.ndarray,
     feature_matrix: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Extracts the feature data and labels for wild-type and variant samples from
+    the feature matrix.
+
+    Args:
+        wt_mask (np.ndarray):
+            Mask for the wild-type entries.
+        variant_mask (np.ndarray):
+            Mask for the variant entries.
+        feature_matrix (np.ndarray):
+            The matrix containing feature values.
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]:
+            A tuple containing the combined feature matrix and the
+            corresponding labels.
+    """
     wt_features = feature_matrix[wt_mask]
     variant_features = feature_matrix[variant_mask]
     combined_features = np.vstack((wt_features, variant_features))
@@ -78,7 +132,26 @@ def get_metrics(
     dataset_name: Optional[str] = "",
     verbose: Optional[str] = True,
 ) -> Tuple[float, float]:
-    y_prob = model.predict_proba(features)
+    """
+    Computes and returns the ROC AUC and accuracy.
+
+    Args:
+        model (sklearn.base.ClassifierMixin):
+            The trained classifier.
+        features (np.ndarray):
+            Feature matrix for the dataset.
+        labels (np.ndarray):
+            True labels for the dataset.
+        dataset_name (Optional[str], optional):
+            The name of the dataset, default is an empty string.
+        verbose (Optional[str], optional):
+            Whether to print the metrics, default is True.
+
+    Returns:
+        Tuple[float, float]:
+            The ROC AUC and accuracy of the classifier on the dataset.
+    """
+    y_prob = model.predict_proba(features)[:, 1].flatten()
     y_pred = y_prob >= 0.5
     roc_auc = sklearn.metrics.roc_auc_score(labels, y_prob)
     accuracy = sklearn.metrics.accuracy_score(labels, y_pred)
@@ -101,11 +174,32 @@ def train_ovwt(
     meta_data: Dict[str, str | List[str]],
     wt_key: Optional[str] = "WT",
 ) -> Tuple[Dict[str, sklearn.base.BaseEstimator], pd.DataFrame]:
+    """
+    Trains models for different variants of a target column.
+
+    Args:
+        train_fun (TrainFun):
+            Function used to train the model.
+        train_split (pd.DataFrame):
+            DataFrame containing the training data.
+        eval_one_split (pd.DataFrame):
+            DataFrame containing the first evaluation split.
+        eval_two_split (pd.DataFrame):
+            DataFrame containing the second evaluation split.
+        meta_data (Dict[str, str | List[str]]):
+            Metadata containing column names for target and features.
+        wt_key (Optional[str], optional):
+            The key used for wild-type samples, default is "WT".
+
+    Returns:
+        Tuple[Dict[str, sklearn.base.BaseEstimator], pd.DataFrame]:
+            A tuple containing the trained models and the metrics DataFrame.
+    """
     target_column: str = meta_data["target_column"]
     feature_columns: List[str] = meta_data["feature_columns"]
 
     get_features = functools.partial(
-        get_features, target_column, feature_columns, wt_key
+        get_mask_features, target_column, feature_columns, wt_key
     )
     train_wt_mask, train_features = get_features(train_split)
     eval_one_wt_mask, eval_one_features = get_features(eval_one_split)
@@ -123,6 +217,7 @@ def train_ovwt(
     for curr_variant in train_split[target_column].unique():
         if curr_variant == wt_key:
             print("WT Key, Skipping\n", flush=True)
+            continue
 
         print(f"Training classifier {curr_variant}", flush=True)
 
@@ -141,14 +236,14 @@ def train_ovwt(
 
         model = train_fun(
             curr_train_features,
-            curr_eval_one_labels,
+            curr_train_labels,
             curr_eval_one_features,
             curr_eval_one_labels,
             weights,
         )
 
         curr_datasets = [
-            ("Train", curr_train_features, curr_eval_one_labels),
+            ("Train", curr_train_features, curr_train_labels),
             ("Eval One", curr_eval_one_features, curr_eval_one_labels),
             ("Eval Two", curr_eval_two_features, curr_eval_two_labels),
         ]
@@ -173,17 +268,37 @@ def get_shap_values(
     wt_key: Optional[str] = "WT",
     dset_name: Optional[str | None] = None,
 ) -> pd.DataFrame:
+    """
+    Computes SHAP values for the given dataset over all variants.
+
+    Args:
+        dataset (pd.DataFrame):
+            The dataset for which to compute SHAP values.
+        models (Dict[str, sklearn.base.BaseEstimator]):
+            The models to use for SHAP value computation.
+        meta_data (Dict[str, str | List[str]]):
+            Metadata containing column names for target and features.
+        wt_key (Optional[str], optional):
+            The key used for wild-type samples, default is "WT".
+        dset_name (Optional[str | None], optional):
+            The name of the dataset, used for progress display, default is None.
+
+    Returns:
+        pd.DataFrame:
+            A DataFrame containing SHAP values for each sample and feature.
+    """
     target_column: str = meta_data["target_column"]
     feature_columns: List[str] = meta_data["feature_columns"]
     dataset = dataset[dataset[target_column] != wt_key]
     all_features = dataset[feature_columns].to_numpy()
 
     # Initialize shap value dataframe
+    filtered_dataset = dataset[dataset[target_column] != wt_key]
     shap_columns = [target_column] + ["p_is_var"] + feature_columns
     shap_df = pd.DataFrame(
         [[None] * len(shap_columns)] * len(dataset), columns=shap_columns
     )
-    shap_df[target_column] = dataset[target_column]
+    shap_df.loc[:, target_column] = filtered_dataset[target_column].to_numpy()
 
     pbar_desc = (
         None if dset_name is None else f"Computing Shap Values Over: {dset_name}"
@@ -194,11 +309,11 @@ def get_shap_values(
         curr_features = all_features[variant_mask]
 
         curr_explainer = shap.TreeExplainer(curr_model)
-        curr_shap_vals = curr_explainer.shap_values(curr_features)
+        curr_shap_vals = curr_explainer.shap_values(curr_features)[:, :, 1]
         shap_df.loc[variant_mask, feature_columns] = curr_shap_vals
 
-        curr_predict_probas = curr_model.predict_proba(curr_features)
-        shap_df.loc["p_is_var", variant_mask] = curr_predict_probas
+        curr_predict_probas = curr_model.predict_proba(curr_features)[:, 1]
+        shap_df["p_is_var"][variant_mask] = curr_predict_probas
 
     return shap_df
 
@@ -212,6 +327,25 @@ def ovwt(
     output_dir: PathLike,
     wt_key: Optional[str] = "WT",
 ) -> None:
+    """
+    Orchestrates the training, evaluation, and SHAP value computation.
+
+    Args:
+        train_fun (TrainFun):
+            Function used to train the model.
+        train_data_path (PathLike):
+            Path to the training data file.
+        eval_one_data_path (PathLike):
+            Path to the first evaluation data file.
+        eval_two_data_path (PathLike):
+            Path to the second evaluation data file.
+        meta_data_json_path (PathLike):
+            Path to the metadata JSON file.
+        output_dir (PathLike):
+            Directory where results and models are saved.
+        wt_key (Optional[str], optional):
+            The key used for wild-type samples, default is "WT".
+    """
     train_split = pd.read_parquet(train_data_path)
     eval_one_split = pd.read_parquet(eval_one_data_path)
     eval_two_split = pd.read_parquet(eval_two_data_path)
