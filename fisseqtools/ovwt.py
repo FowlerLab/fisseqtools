@@ -54,7 +54,8 @@ def train_xgboost(
         colsample_bytree=0.7,
         colsample_bylevel=0.7,
         colsample_bynode=0.7,
-        early_stopping_rounds=10,
+        subsample=0.5,
+        early_stopping_rounds=5,
         n_estimators=100,
         eval_metric="auc",
     ).fit(
