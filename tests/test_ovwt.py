@@ -14,6 +14,7 @@ from fisseqtools.ovwt import (
     get_shap_values,
     get_train_data_labels,
     ovwt,
+    ovwt_shap_only,
     train_ovwt,
     train_xgboost,
 )
@@ -238,3 +239,20 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_one_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+
+    output_dir_shap_only = tmp_path / "shap_only"
+    output_dir_shap_only.mkdir()
+
+    ovwt_shap_only(
+        str(output_dir / "models.pkl"),
+        str(tmp_path / "train.parquet"),
+        str(tmp_path / "eval_one.parquet"),
+        str(tmp_path / "eval_two.parquet"),
+        str(tmp_path / "meta_data.json"),
+        str(output_dir_shap_only),
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir_shap_only / "eval_one_shap.parquet").is_file()
+    assert pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()

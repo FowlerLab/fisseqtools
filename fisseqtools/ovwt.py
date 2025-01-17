@@ -308,9 +308,12 @@ def get_shap_values(
         curr_model = models[curr_variant]
         variant_mask = (shap_df[target_column] == curr_variant).to_numpy()
         curr_features = all_features[variant_mask]
-
         curr_explainer = shap.TreeExplainer(curr_model)
-        curr_shap_vals = curr_explainer.shap_values(curr_features)[:, :, 1]
+        curr_shap_vals = curr_explainer.shap_values(curr_features)
+
+        if len(curr_shap_vals.shape) == 3:
+            curr_shap_vals = curr_shap_vals[:, :, 1]
+
         shap_df.loc[variant_mask, feature_columns] = curr_shap_vals
 
         curr_predict_probas = curr_model.predict_proba(curr_features)[:, 1]
@@ -375,5 +378,58 @@ def ovwt(
         curr_shap_df.to_parquet(output_dir / f"{name}_shap.parquet")
 
 
+def ovwt_shap_only(
+    model_pkl_path: PathLike,
+    train_data_path: PathLike,
+    eval_one_data_path: PathLike,
+    eval_two_data_path: PathLike,
+    meta_data_json_path: PathLike,
+    output_dir: PathLike,
+    wt_key: Optional[str] = "WT",
+) -> None:
+    """
+    Compute shap values over training data
+
+    Args:
+        model_pkl_path (PathLike):
+            Path to the pickled model dictionary
+        train_data_path (PathLike):
+            Path to the training data file.
+        eval_one_data_path (PathLike):
+            Path to the first evaluation data file.
+        eval_two_data_path (PathLike):
+            Path to the second evaluation data file.
+        meta_data_json_path (PathLike):
+            Path to the metadata JSON file.
+        output_dir (PathLike):
+            Directory where results and models are saved.
+        wt_key (Optional[str], optional):
+            The key used for wild-type samples, default is "WT".
+    """
+    train_split = pd.read_parquet(train_data_path)
+    eval_one_split = pd.read_parquet(eval_one_data_path)
+    eval_two_split = pd.read_parquet(eval_two_data_path)
+
+    with open(meta_data_json_path) as f:
+        meta_data = json.load(f)
+
+    output_dir = pathlib.Path(output_dir)
+
+    with open(model_pkl_path, "rb") as f:
+        models = pickle.load(f)
+
+    shap_targets = [
+        ("train", train_split),
+        ("eval_one", eval_one_split),
+        ("eval_two", eval_two_split),
+    ]
+
+    for name, split in shap_targets:
+        curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)
+        curr_shap_df.to_parquet(output_dir / f"{name}_shap.parquet")
+
+
 if __name__ == "__main__":
-    fire.Fire({"xgb": functools.partial(ovwt, train_xgboost)})
+    fire.Fire(
+        {"xgb": functools.partial(ovwt, train_xgboost), "shap_only": ovwt_shap_only}
+    )
