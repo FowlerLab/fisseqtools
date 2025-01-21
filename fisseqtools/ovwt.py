@@ -315,7 +315,7 @@ def get_shap_values(
             curr_shap_vals = curr_shap_vals[:, :, 1]
 
         shap_df.loc[variant_mask, feature_columns] = curr_shap_vals
-
+        shap_df.loc[variant_mask, target_column] = curr_variant
         curr_predict_probas = curr_model.predict_proba(curr_features)[:, 1]
         shap_df.loc[variant_mask, "p_is_var"] = curr_predict_probas
 

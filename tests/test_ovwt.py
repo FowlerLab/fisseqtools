@@ -181,6 +181,8 @@ def test_get_shap_values():
     )
 
     assert shap_vals.shape == (50, 3)
+    assert "label" in shap_vals.columns
+    assert "index" in shap_vals.columns
     assert all(shap_vals["label"] == "B")
     assert all(shap_vals["p_is_var"] == pytest.approx(1.0))
     assert all(~shap_vals["index"].isna())
