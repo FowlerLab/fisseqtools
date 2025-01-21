@@ -149,11 +149,17 @@ def get_splits(
 
     train_split, remainder = sklearn.model_selection.train_test_split(
         combined_df,
-        test_size=0.2,
+        test_size=0.3,
         stratify=combined_df["aaChanges"],
         random_state=random_state,
     )
-    eval_one, test = sklearn.model_selection.train_test_split(
+    eval_one, remainder = sklearn.model_selection.train_test_split(
+        remainder,
+        test_size=2 / 3,
+        stratify=remainder["aaChanges"],
+        random_state=random_state,
+    )
+    eval_two, test = sklearn.model_selection.train_test_split(
         remainder,
         test_size=0.5,
         stratify=remainder["aaChanges"],
@@ -161,7 +167,8 @@ def get_splits(
     )
 
     train_split.to_parquet(output_dir / "train.parquet")
-    eval_one.to_parquet(output_dir / "eval.parquet")
+    eval_one.to_parquet(output_dir / "eval_one.parquet")
+    eval_two.to_parquet(output_dir / "eval_two.parquet")
     test.to_parquet(output_dir / "test.parquet")
 
     feature_cols = set(combined_df.columns) - {"aaChanges", "virtualBarcode"}

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from fisseqtools.cell_profiler_splits import (
+from fisseqtools.archive.cell_profiler_splits_old import (
     filter_no_stratify,
     filter_non_numeric,
     filter_stratify_replicates,
@@ -92,19 +92,23 @@ def test_get_splits(tmp_path):
     )
 
     assert (splits_path / "train.parquet").exists()
-    assert (splits_path / "eval.parquet").exists()
+    assert (splits_path / "eval_one.parquet").exists()
+    assert (splits_path / "eval_two.parquet").exists()
     assert (splits_path / "test.parquet").exists()
 
     train = pd.read_parquet(splits_path / "train.parquet")
-    eval = pd.read_parquet(splits_path / "eval.parquet")
+    eval_one = pd.read_parquet(splits_path / "eval_one.parquet")
+    eval_two = pd.read_parquet(splits_path / "eval_two.parquet")
     test = pd.read_parquet(splits_path / "test.parquet")
 
-    assert len(train) == 16
-    assert len(eval) == 2
+    assert len(train) == 14
+    assert len(eval_one) == 2
+    assert len(eval_two) == 2
     assert len(test) == 2
 
-    assert train["aaChanges"].value_counts().to_dict() == {"A": 8, "B": 8}
-    assert eval["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
+    assert train["aaChanges"].value_counts().to_dict() == {"A": 7, "B": 7}
+    assert eval_one["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
+    assert eval_two["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
     assert test["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
 
     splits_path = tmp_path / "splits_two"
@@ -119,17 +123,21 @@ def test_get_splits(tmp_path):
     )
 
     assert (splits_path / "train.parquet").exists()
-    assert (splits_path / "eval.parquet").exists()
+    assert (splits_path / "eval_one.parquet").exists()
+    assert (splits_path / "eval_two.parquet").exists()
     assert (splits_path / "test.parquet").exists()
 
     train = pd.read_parquet(splits_path / "train.parquet")
-    eval = pd.read_parquet(splits_path / "eval.parquet")
+    eval_one = pd.read_parquet(splits_path / "eval_one.parquet")
+    eval_two = pd.read_parquet(splits_path / "eval_two.parquet")
     test = pd.read_parquet(splits_path / "test.parquet")
 
-    assert len(train) == 16
-    assert len(eval) == 2
+    assert len(train) == 14
+    assert len(eval_one) == 2
+    assert len(eval_two) == 2
     assert len(test) == 2
 
-    assert train["aaChanges"].value_counts().to_dict() == {"A": 8, "B": 8}
-    assert eval["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
+    assert train["aaChanges"].value_counts().to_dict() == {"A": 7, "B": 7}
+    assert eval_one["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
+    assert eval_two["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
     assert test["aaChanges"].value_counts().to_dict() == {"A": 1, "B": 1}
