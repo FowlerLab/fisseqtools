@@ -99,7 +99,7 @@ def test_get_splits(tmp_path):
     eval = pd.read_parquet(splits_path / "eval.parquet")
     test = pd.read_parquet(splits_path / "test.parquet")
 
-    assert len(train) == 16
+    assert len(train) == 16.0
     assert len(eval) == 2
     assert len(test) == 2
 

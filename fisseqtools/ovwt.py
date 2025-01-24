@@ -171,9 +171,9 @@ def train_ovwt(
     train_fun: TrainFun,
     train_split: pd.DataFrame,
     eval_one_split: pd.DataFrame,
-    eval_two_split: pd.DataFrame,
     meta_data: Dict[str, str | List[str]],
     wt_key: Optional[str] = "WT",
+    eval_two_split: Optional[pd.DataFrame] = None,
 ) -> Tuple[Dict[str, sklearn.base.BaseEstimator], pd.DataFrame]:
     """
     Trains models for different variants of a target column.
@@ -204,9 +204,11 @@ def train_ovwt(
     )
     train_wt_mask, train_features = get_features(train_split)
     eval_one_wt_mask, eval_one_features = get_features(eval_one_split)
-    eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
 
-    datasets = ["eval_two", "eval_one", "train"]
+    datasets = ["eval", "train"]
+    if eval_two_split is not None:
+        datasets.append("eval_two")
+
     stats = ["roc_auc", "accuracy"]
     accuracy_roc = {
         f"{dataset}_{stat}": list()
@@ -230,9 +232,6 @@ def train_ovwt(
         curr_eval_one_features, curr_eval_one_labels = get_train_data_labels(
             eval_one_wt_mask, get_var_mask(eval_one_split), eval_one_features
         )
-        curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(
-            eval_two_wt_mask, get_var_mask(eval_two_split), eval_two_features
-        )
         weights = sklearn.utils.compute_sample_weight("balanced", curr_train_labels)
 
         model = train_fun(
@@ -245,9 +244,17 @@ def train_ovwt(
 
         curr_datasets = [
             ("Train", curr_train_features, curr_train_labels),
-            ("Eval One", curr_eval_one_features, curr_eval_one_labels),
-            ("Eval Two", curr_eval_two_features, curr_eval_two_labels),
+            ("Eval", curr_eval_one_features, curr_eval_one_labels),
         ]
+
+        if eval_two_split is not None:
+            eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
+            curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(
+                eval_two_wt_mask, get_var_mask(eval_two_split), eval_two_features
+            )
+            curr_datasets.append(
+                ("Eval Two", curr_eval_two_features, curr_eval_two_labels)
+            )
 
         for name, features, labels in curr_datasets:
             roc_auc, accuracy = get_metrics(model, features, labels, dataset_name=name)
@@ -326,9 +333,9 @@ def ovwt(
     train_fun: TrainFun,
     train_data_path: PathLike,
     eval_one_data_path: PathLike,
-    eval_two_data_path: PathLike,
     meta_data_json_path: PathLike,
     output_dir: PathLike,
+    eval_two_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
 ) -> None:
     """
@@ -352,7 +359,9 @@ def ovwt(
     """
     train_split = pd.read_parquet(train_data_path)
     eval_one_split = pd.read_parquet(eval_one_data_path)
-    eval_two_split = pd.read_parquet(eval_two_data_path)
+    eval_two_split = None
+    if eval_two_data_path is not None:
+        eval_two_split = pd.read_parquet(eval_two_data_path)
 
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
@@ -360,7 +369,12 @@ def ovwt(
     output_dir = pathlib.Path(output_dir)
 
     models, accuracy_roc = train_ovwt(
-        train_fun, train_split, eval_one_split, eval_two_split, meta_data, wt_key
+        train_fun=train_fun,
+        train_split=train_split,
+        eval_one_split=eval_one_split,
+        meta_data=meta_data,
+        eval_two_split=eval_two_split,
+        wt_key=wt_key,
     )
 
     accuracy_roc.to_csv(output_dir / "train_results.csv")
@@ -369,9 +383,11 @@ def ovwt(
 
     shap_targets = [
         ("train", train_split),
-        ("eval_one", eval_one_split),
-        ("eval_two", eval_two_split),
+        ("eval", eval_one_split),
     ]
+
+    if eval_two_split is not None:
+        shap_targets.append(("eval_two", eval_two_split))
 
     for name, split in shap_targets:
         curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)
@@ -382,9 +398,9 @@ def ovwt_shap_only(
     model_pkl_path: PathLike,
     train_data_path: PathLike,
     eval_one_data_path: PathLike,
-    eval_two_data_path: PathLike,
     meta_data_json_path: PathLike,
     output_dir: PathLike,
+    eval_two_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
 ) -> None:
     """
@@ -408,7 +424,9 @@ def ovwt_shap_only(
     """
     train_split = pd.read_parquet(train_data_path)
     eval_one_split = pd.read_parquet(eval_one_data_path)
-    eval_two_split = pd.read_parquet(eval_two_data_path)
+    eval_two_split = None
+    if eval_two_data_path is not None:
+        eval_two_split = pd.read_parquet(eval_two_data_path)
 
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
@@ -420,9 +438,11 @@ def ovwt_shap_only(
 
     shap_targets = [
         ("train", train_split),
-        ("eval_one", eval_one_split),
-        ("eval_two", eval_two_split),
+        ("eval", eval_one_split),
     ]
+
+    if eval_two_split is not None:
+        shap_targets.append(("eval_two", eval_two_split))
 
     for name, split in shap_targets:
         curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)
