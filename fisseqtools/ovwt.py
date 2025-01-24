@@ -377,7 +377,12 @@ def ovwt(
         wt_key=wt_key,
     )
 
+    target_column = meta_data["target_column"]
+    example_counts = accuracy_roc[target_column].value_counts()
+    accuracy_roc["Example Count"] = accuracy_roc[target_column].map(example_counts)
+    accuracy_roc = accuracy_roc.sort_values(by=target_column, ascending=False)
     accuracy_roc.to_csv(output_dir / "train_results.csv")
+
     with open(output_dir / "models.pkl", "wb") as f:
         pickle.dump(models, f)
 

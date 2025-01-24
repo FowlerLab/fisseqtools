@@ -261,6 +261,24 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
 
+    output_dir = tmp_path / "no_second_eval"
+    output_dir.mkdir()
+
+    ovwt(
+        train_fun=train_fun,
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()
+    assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+
     output_dir_shap_only = tmp_path / "shap_only"
     output_dir_shap_only.mkdir()
 
@@ -277,3 +295,19 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir_shap_only / "eval_shap.parquet").is_file()
     assert pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()
+
+    output_dir_shap_only = tmp_path / "shap_only_no_second_eval"
+    output_dir_shap_only.mkdir()
+
+    ovwt_shap_only(
+        model_pkl_path=str(output_dir / "models.pkl"),
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir_shap_only),
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir_shap_only / "eval_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()
