@@ -2,11 +2,11 @@ import re
 from os import PathLike
 
 import fire
-import matplotlib.colors
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
+import scipy.stats
 import sklearn.decomposition
 import sklearn.preprocessing
 import umap
@@ -49,18 +49,28 @@ def variant_classification(v):
 
 
 def graph_score_distribution(
-    score_file_path: PathLike, img_save_path: PathLike | None = None
+    score_file_path: PathLike,
+    variant_class: str | None = None,
+    img_save_path: PathLike | None = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
-    scores = data_df["eval_two_roc_auc"]
+    title = "Eval ROC AUC Distribution: XGboost w/ Cell Profiler Features"
+
+    if variant_class is not None:
+        variant_classes = data_df["aaChanges"].apply(variant_classification)
+        data_df = data_df[variant_classes == variant_class]
+        title += f" ({variant_class})"
+
+    scores = data_df["eval_roc_auc"]
     mean_score = scores.mean()
 
+    sns.histplot(scores, kde=False, alpha=0.5, stat="density")
     sns.kdeplot(scores, shade=True)
     plt.axvline(
         x=mean_score, color="red", linestyle="--", label=f"Mean = {mean_score:.2f}"
     )
     plt.legend()
-    plt.title("Eval ROC AUC Distribution: XGboost w/ Cell Profiler Features")
+    plt.title(title)
     plt.xlabel("ROC AUC")
 
     if img_save_path is None:
@@ -75,13 +85,15 @@ def graph_score_distribution_by_variant(
     data_df = pd.read_csv(score_file_path)
     data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
 
-    mean_score = data_df["eval_two_roc_auc"].mean()
-    sns.violinplot(data=data_df, x="Variant Class", y="eval_two_roc_auc")
+    mean_score = data_df["eval_roc_auc"].mean()
+    violin_plot = sns.violinplot(data=data_df, x="Variant Class", y="eval_roc_auc")
     plt.axhline(
         y=mean_score, color="red", linestyle="--", label=f"Mean = {mean_score:.2f}"
     )
 
-    category_counts = data_df["Variant Class"].value_counts()
+    categories = violin_plot.get_xticklabels()
+    category_labels = [label.get_text() for label in categories]
+    category_counts = data_df["Variant Class"].value_counts().reindex(category_labels)
     plt.xticks(
         ticks=range(len(category_counts)),
         labels=[f"{cat}\n(n={category_counts[cat]})" for cat in category_counts.index],
@@ -97,23 +109,98 @@ def graph_score_distribution_by_variant(
         plt.savefig(img_save_path)
 
 
+def graph_auc_examples(
+    score_file_path: PathLike,
+    variant_class: str | None = None,
+    img_save_path: PathLike | None = None,
+) -> None:
+    data_df = pd.read_csv(score_file_path)
+    title = "Num Training Examples vs. ROC AUC"
+
+    if variant_class is not None:
+        variant_classes = data_df["aaChanges"].apply(variant_classification)
+        data_df = data_df[variant_classes == variant_class]
+        title += f" ({variant_class})"
+
+    title += f" (n = {len(data_df)})"
+    example_counts = data_df["Example Count"].to_numpy()
+    auc_roc = data_df["eval_roc_auc"].to_numpy()
+
+    xy = np.vstack((example_counts, auc_roc))
+    z = scipy.stats.gaussian_kde(xy)(xy)
+    spearman, p_val = scipy.stats.pearsonr(example_counts, auc_roc)
+
+    plt.scatter(
+        example_counts, auc_roc, c=z, label=f"Spearman={spearman:0.4f}, P={p_val:0.4f}"
+    )
+    plt.title(title)
+    plt.xlabel("Num Training Examples")
+    plt.ylabel("ROC AUC")
+    plt.legend()
+
+    if img_save_path is None:
+        plt.show()
+    else:
+        plt.savefig(img_save_path)
+
+
+def _color_by_class(data_df: pd.DataFrame, shap_scores: np.ndarray) -> None:
+    data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
+    for curr_class in data_df["Variant Class"].unique():
+        mask = (data_df["Variant Class"] == curr_class).to_numpy(dtype=bool)
+        target_umap = shap_scores[mask]
+        plt.scatter(
+            target_umap[:, 0].flatten(),
+            target_umap[:, 1].flatten(),
+            edgecolors="black",
+            linewidth=0.5,
+            label=curr_class,
+        )
+
+    plt.legend()
+
+
+def _color_by_distance(
+    data_df: pd.DataFrame, shap_scores: np.ndarray, distance_measure: np.ndarray
+) -> None:
+    plt.scatter(
+        shap_scores[:, 0].flatten(),
+        shap_scores[:, 1].flatten(),
+        c=data_df[distance_measure],
+        vmax=1.0,
+        vmin=0.5,
+        cmap=plt.cm.Blues,
+    )
+    plt.colorbar()
+
+
+def _finalize_pca_plot(title: str, img_save_path: PathLike | None) -> None:
+    plt.title(title)
+    plt.xlabel("UMAP One")
+    plt.ylabel("UMAP Two")
+
+    if img_save_path is None:
+        plt.show()
+    else:
+        plt.savefig(img_save_path)
+
+
 def pca_shap(
     shap_file_path: PathLike,
     pca_n_components: int = 100,
     umap_n_neighbors: int = 15,
     umap_min_dist: float = 0.1,
     aggregate: bool = True,
+    train_results_path: PathLike | None = None,
+    color_by_distance: bool = True,
+    color_by_class: bool = True,
     img_save_path: PathLike | None = None,
 ) -> None:
     data_df = pd.read_parquet(shap_file_path)
     if aggregate:
-        data_df = data_df.groupby("aaChanges").mean()
+        data_df = data_df.groupby("aaChanges", as_index=False).mean()
 
-    print("p_is_var" in data_df.columns)
-    return
-
-    # Scale data
-    shap_scores = data_df.drop(["aaChanges", "p_is_var"], axis=0).to_numpy(dtype=float)
+    shap_scores = data_df.drop(["aaChanges", "p_is_var"], axis=1).to_numpy(dtype=float)
     shap_scores = sklearn.preprocessing.StandardScaler().fit_transform(shap_scores)
     shap_scores = sklearn.decomposition.PCA(
         n_components=pca_n_components
@@ -124,38 +211,19 @@ def pca_shap(
         min_dist=umap_min_dist,
     ).fit_transform(shap_scores)
 
-    # Graph umap
-    data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
-    colors = list(matplotlib.colors.CSS4_COLORS.keys())
-    for curr_class, curr_color in zip(data_df["Variant Class"].unique(), colors):
-        mask = (data_df["Variant Class"] == curr_class).to_numpy(dtype=bool)
-        target_umap = shap_scores[mask]
+    if train_results_path is not None:
+        train_res_df = pd.read_csv(train_results_path)
+        data_df = data_df.merge(train_res_df, on="aaChanges")
 
-        if not aggregate:
-            curr_cmap = matplotlib.colors.LinearSegmentedColormap.from_list(
-                f"gray_to_{curr_color}", ["gray", curr_color]
-            )
-        else:
-            curr_cmap = None
+    title = "Variant SHAP Score UMAP" + ("" if not aggregate else " (Aggregated)")
+    if color_by_distance:
+        distance_measure = "p_is_var" if train_results_path is None else "eval_roc_auc"
+        _color_by_distance(data_df, shap_scores, distance_measure)
+        _finalize_pca_plot(title, img_save_path)
 
-        colors = data_df.loc[mask, "p_is_var"] if not aggregate else None
-        plt.scatter(
-            target_umap[:, 0].flatten(),
-            target_umap[:, 1].flatten(),
-            c=colors,
-            cmap=curr_cmap,
-            vmax=1.0,
-            vmin=0.0,
-        )
-
-    plt.title("Variant SHAP Score UMAP" + ("" if not aggregate else " (Aggregated)"))
-    plt.xlabel("UMAP One")
-    plt.ylabel("UMAP Two")
-
-    if img_save_path is None:
-        plt.show()
-    else:
-        plt.savefig(img_save_path)
+    if color_by_class:
+        _color_by_class(data_df, shap_scores)
+        _finalize_pca_plot(title, img_save_path)
 
 
 if __name__ == "__main__":

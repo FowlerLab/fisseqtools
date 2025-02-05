@@ -67,6 +67,47 @@ def train_xgboost(
     )
 
 
+def train_single_feature_xgboost(
+    x_train: np.ndarray,
+    y_train: np.ndarray,
+    x_eval: np.ndarray,
+    y_eval: np.ndarray,
+    sample_weight: Optional[np.ndarray | None] = None,
+) -> sklearn.base.BaseEstimator:
+    """
+    Trains an XGBoost classifier that splits examples on only one feature.
+
+    Args:
+        x_train (np.ndarray):
+            Feature matrix for training data.
+        y_train (np.ndarray):
+            Labels for training data.
+        x_eval (np.ndarray):
+            Feature matrix for evaluation data.
+        y_eval (np.ndarray):
+            Labels for evaluation data.
+        sample_weight (Optional[np.ndarray | None], optional):
+            Sample weights for training, default is None.
+
+    Returns:
+        sklearn.base.BaseEstimator:
+            The trained XGBoost classifier.
+    """
+    return xgb.XGBClassifier(
+        objective="binary:logistic",
+        max_depth=1,
+        n_estimators=1,
+        eval_metric="auc",
+        early_stopping_rounds=1,
+    ).fit(
+        x_train,
+        y_train,
+        eval_set=[(x_train, y_train), (x_eval, y_eval)],
+        sample_weight=sample_weight,
+        verbose=True,
+    )
+
+
 def get_mask_features(
     target_column: str,
     feature_columns: List[str],
@@ -337,7 +378,12 @@ def ovwt(
     output_dir: PathLike,
     eval_two_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
-) -> None:
+) -> Tuple[
+    pd.DataFrame,
+    Dict[str, sklearn.base.BaseEstimator],
+    Dict[str, str | List[str]],
+    List[str],
+]:
     """
     Orchestrates the training, evaluation, and SHAP value computation.
 
@@ -378,7 +424,7 @@ def ovwt(
     )
 
     target_column = meta_data["target_column"]
-    example_counts = accuracy_roc[target_column].value_counts()
+    example_counts = train_split[target_column].value_counts()
     accuracy_roc["Example Count"] = accuracy_roc[target_column].map(example_counts)
     accuracy_roc = accuracy_roc.sort_values(by=target_column, ascending=False)
     accuracy_roc.to_csv(output_dir / "train_results.csv")
@@ -397,6 +443,45 @@ def ovwt(
     for name, split in shap_targets:
         curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)
         curr_shap_df.to_parquet(output_dir / f"{name}_shap.parquet")
+
+    feature_columns = eval_one_split[meta_data["feature_columns"]].columns
+    return models, meta_data, list(feature_columns)
+
+
+def ovwt_single_feature(
+    train_data_path: PathLike,
+    eval_one_data_path: PathLike,
+    meta_data_json_path: PathLike,
+    output_dir: PathLike,
+    eval_two_data_path: Optional[PathLike] = None,
+    wt_key: Optional[str] = "WT",
+) -> None:
+    output_dir = pathlib.Path(output_dir)
+    models, meta_data, columns = ovwt(
+        train_single_feature_xgboost,
+        train_data_path,
+        eval_one_data_path,
+        meta_data_json_path,
+        output_dir,
+        eval_two_data_path,
+        wt_key,
+    )
+
+    features = {
+        meta_data["target_column"]: list(),
+        "feature_name": list(),
+    }
+
+    for variant, stump in models.items():
+        tree_dump = stump.get_booster().get_dump()[0]
+        split_line = tree_dump.split("\n")[0]
+        feature_part = split_line.split("[")[1].split("]")[0]
+        feature_index = int(feature_part.split("f")[1].split("<")[0])
+        feature_name = columns[feature_index]
+        features[meta_data["target_column"]].append(variant)
+        features["feature_name"].append(feature_name)
+
+    pd.DataFrame(features).to_csv(output_dir / "selected_features.csv")
 
 
 def ovwt_shap_only(
@@ -456,5 +541,9 @@ def ovwt_shap_only(
 
 if __name__ == "__main__":
     fire.Fire(
-        {"xgb": functools.partial(ovwt, train_xgboost), "shap_only": ovwt_shap_only}
+        {
+            "xgb": functools.partial(ovwt, train_xgboost),
+            "shap_only": ovwt_shap_only,
+            "single_feature": ovwt_single_feature,
+        }
     )

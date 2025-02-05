@@ -14,9 +14,11 @@ from fisseqtools.ovwt import (
     get_shap_values,
     get_train_data_labels,
     ovwt,
+    ovwt_single_feature,
     ovwt_shap_only,
     train_ovwt,
     train_xgboost,
+    train_single_feature_xgboost,
 )
 
 
@@ -35,6 +37,19 @@ def test_train_xgboost():
     )
 
     model = train_xgboost(
+        train_df["index"].to_numpy().reshape((-1, 1)),
+        train_df["index"].to_numpy(),
+        eval_one_df["index"].to_numpy().reshape((-1, 1)),
+        eval_one_df["index"].to_numpy(),
+    )
+
+    train_predictions = model.predict(train_df["index"].to_numpy().reshape((-1, 1)))
+    eval_predictons = model.predict(eval_one_df["index"].to_numpy().reshape((-1, 1)))
+
+    assert np.array_equal(train_predictions, train_df["index"].to_numpy())
+    assert np.array_equal(eval_predictons, eval_one_df["index"].to_numpy())
+
+    model = train_single_feature_xgboost(
         train_df["index"].to_numpy().reshape((-1, 1)),
         train_df["index"].to_numpy(),
         eval_one_df["index"].to_numpy().reshape((-1, 1)),
@@ -277,6 +292,24 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "models.pkl").is_file()
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+
+    output_dir = tmp_path / "single_feature"
+    output_dir.mkdir()
+
+    ovwt_single_feature(
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()
+    assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "selected_features.csv").is_file()
     assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
 
     output_dir_shap_only = tmp_path / "shap_only"
