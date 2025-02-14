@@ -294,6 +294,25 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
     assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
 
+    output_dir = tmp_path / "shuffle_labels"
+    output_dir.mkdir()
+
+    ovwt(
+        train_fun=train_fun,
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        wt_key="A",
+        permutate_labels=True,
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()
+    assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+
     output_dir = tmp_path / "single_feature"
     output_dir.mkdir()
 

@@ -22,6 +22,9 @@ TrainFun = Callable[
 ]
 
 
+np.random.seed(42)
+
+
 def train_xgboost(
     x_train: np.ndarray,
     y_train: np.ndarray,
@@ -378,6 +381,7 @@ def ovwt(
     output_dir: PathLike,
     eval_two_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
+    permutate_labels: bool = False,
 ) -> Tuple[
     pd.DataFrame,
     Dict[str, sklearn.base.BaseEstimator],
@@ -412,8 +416,21 @@ def ovwt(
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
 
-    output_dir = pathlib.Path(output_dir)
+    target_column = meta_data["target_column"]
+    if permutate_labels:
+        train_split[target_column] = (
+            train_split[target_column].sample(frac=1).reset_index(drop=True)
+        )
+        eval_one_split[target_column] = (
+            eval_one_split[target_column].sample(frac=1).reset_index(drop=True)
+        )
 
+        if eval_two_split is not None:
+            eval_two_split[target_column] = (
+                eval_two_split[target_column].sample(frac=1).reset_index(drop=True)
+            )
+
+    output_dir = pathlib.Path(output_dir)
     models, accuracy_roc = train_ovwt(
         train_fun=train_fun,
         train_split=train_split,
@@ -423,7 +440,6 @@ def ovwt(
         wt_key=wt_key,
     )
 
-    target_column = meta_data["target_column"]
     example_counts = train_split[target_column].value_counts()
     accuracy_roc["Example Count"] = accuracy_roc[target_column].map(example_counts)
     accuracy_roc = accuracy_roc.sort_values(by=target_column, ascending=False)

@@ -1,3 +1,4 @@
+import json
 import re
 from os import PathLike
 
@@ -5,7 +6,11 @@ import fire
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import scipy.cluster.hierarchy
+import scipy.sparse
 import seaborn as sns
+import scipy.cluster.hierarchy
+import scipy.spatial.distance
 import scipy.stats
 import sklearn.decomposition
 import sklearn.preprocessing
@@ -52,9 +57,12 @@ def graph_score_distribution(
     score_file_path: PathLike,
     variant_class: str | None = None,
     img_save_path: PathLike | None = None,
+    experiment_name: str | None = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
-    title = "Eval ROC AUC Distribution: XGboost w/ Cell Profiler Features"
+    title: str = "Eval ROC AUC Distribution"
+    if experiment_name is not None:
+        title = f"{title}: {experiment_name}"
 
     if variant_class is not None:
         variant_classes = data_df["aaChanges"].apply(variant_classification)
@@ -72,6 +80,7 @@ def graph_score_distribution(
     plt.legend()
     plt.title(title)
     plt.xlabel("ROC AUC")
+    plt.xlim(0, 1)
 
     if img_save_path is None:
         plt.show()
@@ -80,7 +89,9 @@ def graph_score_distribution(
 
 
 def graph_score_distribution_by_variant(
-    score_file_path: PathLike, img_save_path: PathLike | None = None
+    score_file_path: PathLike,
+    img_save_path: PathLike | None = None,
+    experiment_name: str | None = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
     data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
@@ -99,8 +110,12 @@ def graph_score_distribution_by_variant(
         labels=[f"{cat}\n(n={category_counts[cat]})" for cat in category_counts.index],
     )
 
+    title = "Eval ROC AUC Distribution by Variant Class"
+    if experiment_name is not None:
+        title = f"{title}: {experiment_name}"
+
     plt.legend()
-    plt.title("Eval ROC AUC Distribution by Variant Class")
+    plt.title(title)
     plt.ylabel("ROC AUC")
 
     if img_save_path is None:
@@ -113,9 +128,13 @@ def graph_auc_examples(
     score_file_path: PathLike,
     variant_class: str | None = None,
     img_save_path: PathLike | None = None,
+    experiment_name: str | None = None,
+    xlim: int = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
     title = "Num Training Examples vs. ROC AUC"
+    if experiment_name is not None:
+        title = f"{title}: {experiment_name}"
 
     if variant_class is not None:
         variant_classes = data_df["aaChanges"].apply(variant_classification)
@@ -137,6 +156,55 @@ def graph_auc_examples(
     plt.xlabel("Num Training Examples")
     plt.ylabel("ROC AUC")
     plt.legend()
+
+    if xlim is not None:
+        plt.xlim(0, xlim)
+
+    plt.ylim(0, 1)
+
+    if img_save_path is None:
+        plt.show()
+    else:
+        plt.savefig(img_save_path)
+
+
+def graph_one_v_other(
+    score_file_path_one: PathLike,
+    score_file_path_two: PathLike,
+    img_save_path: PathLike | None = None,
+    variant_class: str | None = None,
+    name_one: str | None = None,
+    name_two: str | None = None,
+) -> None:
+    title = "AUC ROC Score Comparison"
+    if name_one is not None and name_two is not None:
+        title += f": ({name_one} vs. {name_two})"
+
+    score_df_one = pd.read_csv(score_file_path_one)
+    score_df_two = pd.read_csv(score_file_path_two)
+    data_df = pd.merge(score_df_one, score_df_two, on="aaChanges", how="inner")
+
+    if variant_class is not None:
+        variant_classes = data_df["aaChanges"].apply(variant_classification)
+        data_df = data_df[variant_classes == variant_class]
+        title += f" ({variant_class})"
+
+    roc_auc_x = data_df["eval_roc_auc_x"].to_numpy()
+    roc_auc_y = data_df["eval_roc_auc_y"].to_numpy()
+
+    xy = np.vstack((roc_auc_x, roc_auc_y))
+    z = scipy.stats.gaussian_kde(xy)(xy)
+    spearman, p_val = scipy.stats.pearsonr(roc_auc_x, roc_auc_y)
+
+    plt.scatter(
+        roc_auc_x, roc_auc_y, c=z, label=f"Spearman={spearman:0.4f}, P={p_val:0.4f}"
+    )
+    plt.title(title)
+    plt.xlabel(f"ROC AUC: {name_one}")
+    plt.ylabel(f"ROC AUC: {name_two}")
+    plt.legend()
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
 
     if img_save_path is None:
         plt.show()
@@ -185,7 +253,22 @@ def _finalize_pca_plot(title: str, img_save_path: PathLike | None) -> None:
         plt.savefig(img_save_path)
 
 
-def pca_shap(
+def _pca(shap_scores: np.ndarray, pca_n_components: int) -> np.ndarray:
+    shap_scores = sklearn.preprocessing.StandardScaler().fit_transform(shap_scores)
+    shap_scores = sklearn.decomposition.PCA(
+        n_components=pca_n_components
+    ).fit_transform(shap_scores)
+
+    return shap_scores
+
+
+def _cluster_reduction(shap_scores: np.ndarray, cluster_assignments: int) -> None:
+    num_clusters = cluster_assignments.max()
+    cluster_matrix = np.eye(num_clusters)[cluster_assignments - 1]
+    return shap_scores @ cluster_matrix
+
+
+def umap_shap(
     shap_file_path: PathLike,
     pca_n_components: int = 100,
     umap_n_neighbors: int = 15,
@@ -195,16 +278,28 @@ def pca_shap(
     color_by_distance: bool = True,
     color_by_class: bool = True,
     img_save_path: PathLike | None = None,
+    cluster_assignments: PathLike | None = None,
+    reduce_dimensions: bool = True,
 ) -> None:
     data_df = pd.read_parquet(shap_file_path)
     if aggregate:
         data_df = data_df.groupby("aaChanges", as_index=False).mean()
 
-    shap_scores = data_df.drop(["aaChanges", "p_is_var"], axis=1).to_numpy(dtype=float)
+    shap_scores = data_df.drop(["aaChanges", "p_is_var"], axis=1)
+    shap_columns = shap_scores.columns.to_frame(index=False, name="feature")
+    print(shap_columns)
+    shap_scores = shap_scores.to_numpy(dtype=float)
+
+    if reduce_dimensions:
+        if cluster_assignments is None:
+            shap_scores = _pca(shap_scores, pca_n_components)
+        else:
+            cluster_df = pd.read_csv(cluster_assignments)
+            shap_columns = shap_columns.merge(cluster_df, on="feature")
+            cluster_idx = shap_columns["cluster_idx"].to_numpy(dtype=int)
+            shap_scores = _cluster_reduction(shap_scores, cluster_idx)
+
     shap_scores = sklearn.preprocessing.StandardScaler().fit_transform(shap_scores)
-    shap_scores = sklearn.decomposition.PCA(
-        n_components=pca_n_components
-    ).fit_transform(shap_scores)
     shap_scores = umap.UMAP(
         n_neighbors=umap_n_neighbors,
         n_components=2,
@@ -224,6 +319,79 @@ def pca_shap(
     if color_by_class:
         _color_by_class(data_df, shap_scores)
         _finalize_pca_plot(title, img_save_path)
+
+
+def get_feature_clusters(
+    data_path: PathLike,
+    meta_data_path: PathLike,
+    threshold: float = 0.9,
+    num_clusters: int = 100,
+    use_threshold: bool = True,
+    plot: bool = False,
+    img_save_path: PathLike | None = None,
+) -> None:
+    data_df = pd.read_parquet(data_path)
+    with open(meta_data_path) as f:
+        meta_data = json.load(f)
+
+    feature_columns = meta_data["feature_columns"]
+    data_df = data_df[feature_columns]
+    data_df = data_df.dropna()
+    constant_mask = (data_df.nunique() == 1).to_numpy()
+    filt_data_df = data_df.loc[:, ~constant_mask]
+    feature_matrix = filt_data_df.to_numpy(dtype=float)
+
+    correlation, _ = scipy.stats.spearmanr(feature_matrix, axis=0)
+    correlation = np.nan_to_num(correlation, nan=0)
+    correlation = np.abs(correlation)
+    distance_matrix = 1 - correlation
+    distance_matrix = scipy.spatial.distance.squareform(distance_matrix, checks=False)
+    linkage_matrix = scipy.cluster.hierarchy.linkage(distance_matrix, method="average")
+
+    cluster_threshold = 1 - threshold if use_threshold else num_clusters
+    criterion = "distance" if use_threshold else "maxclust"
+    clusters = scipy.cluster.hierarchy.fcluster(
+        linkage_matrix, cluster_threshold, criterion=criterion
+    )
+
+    const_cluster_start = clusters.max() + 1
+    const_cluster_end = const_cluster_start + constant_mask.sum()
+
+    clusters_df = pd.DataFrame({"feature": feature_columns})
+    clusters_df["cluster_idx"] = -1
+    clusters_df.loc[~constant_mask, "cluster_idx"] = clusters
+    clusters_df.loc[constant_mask, "cluster_idx"] = np.arange(
+        const_cluster_start, const_cluster_end
+    )
+
+    # Sort cluster assignments by cluster size and then cluster idx
+    cluster_counts = clusters_df["cluster_idx"].value_counts()
+    clusters_df["cluster_count"] = clusters_df["cluster_idx"].map(cluster_counts)
+    clusters_df = clusters_df.sort_values(
+        by=["cluster_count", "cluster_idx"], ascending=[False, True]
+    )
+    clusters_df.to_csv("cluster_assignments.csv")
+
+    print(f"Number of clusters: {const_cluster_end - 1}")
+    print(f"Top five most frequent clusters:")
+    print(cluster_counts.head(5))
+
+    if img_save_path is not None or plot:
+        sns.clustermap(
+            correlation,
+            row_linkage=linkage_matrix,
+            col_linkage=linkage_matrix,
+            cmap="coolwarm",
+            annot=False,
+            cbar_kws={"label": "Absolute Spearman Correlation"},
+            vmin=0,
+            vmax=1,
+        )
+
+        if img_save_path is None:
+            plt.show()
+        else:
+            plt.savefig(img_save_path)
 
 
 if __name__ == "__main__":
