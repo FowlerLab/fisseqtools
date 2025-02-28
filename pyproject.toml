@@ -38,5 +38,9 @@ dev = [
     "pytest",
 ]
 
+[project.scripts]
+fisseq-graph = "fisseqtools.graph:main"
+fisseq-ovwt = "fisseqtools.ovwt:main"
+
 [tool.setuptools]
 packages = ["fisseqtools"]

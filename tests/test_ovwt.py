@@ -16,6 +16,7 @@ from fisseqtools.ovwt import (
     ovwt,
     ovwt_single_feature,
     ovwt_shap_only,
+    ovwt_stratified,
     train_ovwt,
     train_xgboost,
     train_single_feature_xgboost,
@@ -363,3 +364,36 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir_shap_only / "eval_shap.parquet").is_file()
     assert not pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()
+
+    input_dir = tmp_path / "stratified"
+    input_dir.mkdir()
+
+    train_df_one = train_df.copy()
+    train_df_one["replicate"] = 0
+    train_df_two = train_df_one.copy()
+    train_df_two["replicate"] = 1
+    train_df_strat = pd.concat([train_df_one, train_df_two], ignore_index=True)
+    train_df_strat.to_parquet(input_dir / "train.parquet")
+
+    eval_df_one = eval_one_df.copy()
+    eval_df_one["replicate"] = 0
+    eval_df_two = eval_one_df.copy()
+    eval_df_two["replicate"] = 1
+    eval_df_strat = pd.concat([eval_df_one, eval_df_two], ignore_index=True)
+    eval_df_strat.to_parquet(input_dir / "eval.parquet")
+
+    output_dir = tmp_path / "stratified-output"
+    output_dir.mkdir()
+
+    ovwt_stratified(
+        train_fun=train_fun,
+        train_data_path=str(input_dir / "train.parquet"),
+        eval_one_data_path=str(input_dir / "eval.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        stratify_column="replicate",
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()

@@ -218,6 +218,7 @@ def train_ovwt(
     meta_data: Dict[str, str | List[str]],
     wt_key: Optional[str] = "WT",
     eval_two_split: Optional[pd.DataFrame] = None,
+    permutate_labels: bool = False,
 ) -> Tuple[Dict[str, sklearn.base.BaseEstimator], pd.DataFrame]:
     """
     Trains models for different variants of a target column.
@@ -242,6 +243,19 @@ def train_ovwt(
     """
     target_column: str = meta_data["target_column"]
     feature_columns: List[str] = meta_data["feature_columns"]
+
+    if permutate_labels:
+        train_split[target_column] = (
+            train_split[target_column].sample(frac=1).reset_index(drop=True)
+        )
+        eval_one_split[target_column] = (
+            eval_one_split[target_column].sample(frac=1).reset_index(drop=True)
+        )
+
+        if eval_two_split is not None:
+            eval_two_split[target_column] = (
+                eval_two_split[target_column].sample(frac=1).reset_index(drop=True)
+            )
 
     get_features = functools.partial(
         get_mask_features, target_column, feature_columns, wt_key
@@ -416,20 +430,6 @@ def ovwt(
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
 
-    target_column = meta_data["target_column"]
-    if permutate_labels:
-        train_split[target_column] = (
-            train_split[target_column].sample(frac=1).reset_index(drop=True)
-        )
-        eval_one_split[target_column] = (
-            eval_one_split[target_column].sample(frac=1).reset_index(drop=True)
-        )
-
-        if eval_two_split is not None:
-            eval_two_split[target_column] = (
-                eval_two_split[target_column].sample(frac=1).reset_index(drop=True)
-            )
-
     output_dir = pathlib.Path(output_dir)
     models, accuracy_roc = train_ovwt(
         train_fun=train_fun,
@@ -438,8 +438,10 @@ def ovwt(
         meta_data=meta_data,
         eval_two_split=eval_two_split,
         wt_key=wt_key,
+        permutate_labels=permutate_labels,
     )
 
+    target_column = meta_data["target_column"]
     example_counts = train_split[target_column].value_counts()
     accuracy_roc["Example Count"] = accuracy_roc[target_column].map(example_counts)
     accuracy_roc = accuracy_roc.sort_values(by=target_column, ascending=False)
@@ -555,11 +557,82 @@ def ovwt_shap_only(
         curr_shap_df.to_parquet(output_dir / f"{name}_shap.parquet")
 
 
-if __name__ == "__main__":
+def ovwt_stratified(
+    train_fun: TrainFun,
+    train_data_path: PathLike,
+    eval_one_data_path: PathLike,
+    meta_data_json_path: PathLike,
+    output_dir: PathLike,
+    stratify_column: str,
+    wt_key: Optional[str] = "WT",
+    permutate_labels: bool = False,
+) -> None:
+    """
+    Trains models separately for each unique value in the stratification column
+    and evaluates them independently.
+
+    Args:
+        train_fun (TrainFun):
+            Function used to train the model.
+        train_data_path (PathLike):
+            Path to the training data file.
+        eval_one_data_path (PathLike):
+            Path to the first evaluation data file.
+        meta_data_json_path (PathLike):
+            Path to the metadata JSON file.
+        output_dir (PathLike):
+            Directory where results and models are saved.
+        stratify_column (str):
+            The column used for stratification; models will be trained
+            separately for each unique value in this column.
+        wt_key (Optional[str], optional):
+            The key used for wild-type samples, default is "WT".
+        permutate_labels (bool, optional):
+            Whether to permute labels for control experiments. Default is False.
+    """
+    train_split = pd.read_parquet(train_data_path)
+    eval_split = pd.read_parquet(eval_one_data_path)
+
+    with open(meta_data_json_path) as f:
+        meta_data = json.load(f)
+
+    output_dir = pathlib.Path(output_dir)
+    all_models = dict()
+    result_tables = list()
+    for curr_value in eval_split[stratify_column].unique():
+        print("-" * 10 + f" Training over {stratify_column} = {curr_value} " + "-" * 10)
+        curr_train_split = train_split[train_split[stratify_column] == curr_value]
+        curr_eval_split = eval_split[eval_split[stratify_column] == curr_value]
+
+        models, accuracy_roc = train_ovwt(
+            train_fun=train_fun,
+            train_split=curr_train_split,
+            eval_one_split=curr_eval_split,
+            meta_data=meta_data,
+            wt_key=wt_key,
+            permutate_labels=permutate_labels,
+        )
+
+        accuracy_roc[stratify_column] = curr_value
+        result_tables.append(accuracy_roc)
+        all_models[curr_value] = models
+
+    pd.concat(result_tables, ignore_index=True).to_csv(output_dir / "train_results.csv")
+    with open(output_dir / "models.pkl", "wb") as f:
+        pickle.dump(models, f)
+
+
+def main():
+    """Setup CLI"""
     fire.Fire(
         {
             "xgb": functools.partial(ovwt, train_xgboost),
+            "xgb-stratified": functools.partial(ovwt_stratified, train_xgboost),
             "shap_only": ovwt_shap_only,
             "single_feature": ovwt_single_feature,
         }
     )
+
+
+if __name__ == "__main__":
+    main()

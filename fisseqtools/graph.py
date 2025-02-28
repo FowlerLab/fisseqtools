@@ -1,3 +1,4 @@
+import pathlib
 import json
 import re
 from os import PathLike
@@ -71,21 +72,31 @@ def graph_score_distribution(
 
     scores = data_df["eval_roc_auc"]
     mean_score = scores.mean()
+    median_score = scores.median()
 
-    sns.histplot(scores, kde=False, alpha=0.5, stat="density")
-    sns.kdeplot(scores, shade=True)
-    plt.axvline(
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.histplot(scores, kde=False, alpha=0.5, stat="density", ax=ax)
+    sns.kdeplot(scores, shade=True, ax=ax)
+
+    ax.axvline(
+        x=median_score,
+        color="black",
+        linestyle="--",
+        label=f"Median = {median_score:.2f}",
+    )
+    ax.axvline(
         x=mean_score, color="red", linestyle="--", label=f"Mean = {mean_score:.2f}"
     )
-    plt.legend()
-    plt.title(title)
-    plt.xlabel("ROC AUC")
-    plt.xlim(0, 1)
+    ax.legend()
+    ax.set_title(title)
+    ax.set_xlabel("ROC AUC")
+    ax.set_xlim(0, 1)
 
-    if img_save_path is None:
-        plt.show()
+    if img_save_path:
+        fig.savefig(img_save_path, bbox_inches="tight")
+        plt.close(fig)
     else:
-        plt.savefig(img_save_path)
+        plt.show()
 
 
 def graph_score_distribution_by_variant(
@@ -95,33 +106,37 @@ def graph_score_distribution_by_variant(
 ) -> None:
     data_df = pd.read_csv(score_file_path)
     data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
-
     mean_score = data_df["eval_roc_auc"].mean()
-    violin_plot = sns.violinplot(data=data_df, x="Variant Class", y="eval_roc_auc")
-    plt.axhline(
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    violin_plot = sns.violinplot(
+        data=data_df, x="Variant Class", y="eval_roc_auc", ax=ax
+    )
+    ax.axhline(
         y=mean_score, color="red", linestyle="--", label=f"Mean = {mean_score:.2f}"
     )
 
-    categories = violin_plot.get_xticklabels()
-    category_labels = [label.get_text() for label in categories]
-    category_counts = data_df["Variant Class"].value_counts().reindex(category_labels)
-    plt.xticks(
-        ticks=range(len(category_counts)),
-        labels=[f"{cat}\n(n={category_counts[cat]})" for cat in category_counts.index],
+    categories = [label.get_text() for label in violin_plot.get_xticklabels()]
+    category_counts = data_df["Variant Class"].value_counts().reindex(categories)
+
+    ax.set_xticks(range(len(category_counts)))
+    ax.set_xticklabels(
+        [f"{cat}\n(n={category_counts[cat]})" for cat in category_counts.index]
     )
 
     title = "Eval ROC AUC Distribution by Variant Class"
-    if experiment_name is not None:
-        title = f"{title}: {experiment_name}"
+    if experiment_name:
+        title += f": {experiment_name}"
 
-    plt.legend()
-    plt.title(title)
-    plt.ylabel("ROC AUC")
+    ax.set_title(title)
+    ax.set_ylabel("ROC AUC")
+    ax.legend()
 
-    if img_save_path is None:
-        plt.show()
+    if img_save_path:
+        fig.savefig(img_save_path, bbox_inches="tight")
+        plt.close(fig)
     else:
-        plt.savefig(img_save_path)
+        plt.show()
 
 
 def graph_auc_examples(
@@ -132,6 +147,7 @@ def graph_auc_examples(
     xlim: int = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
+    data_df = data_df.dropna()
     title = "Num Training Examples vs. ROC AUC"
     if experiment_name is not None:
         title = f"{title}: {experiment_name}"
@@ -149,23 +165,78 @@ def graph_auc_examples(
     z = scipy.stats.gaussian_kde(xy)(xy)
     spearman, p_val = scipy.stats.pearsonr(example_counts, auc_roc)
 
-    plt.scatter(
-        example_counts, auc_roc, c=z, label=f"Spearman={spearman:0.4f}, P={p_val:0.4f}"
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.scatter(
+        example_counts,
+        auc_roc,
+        c=z,
+        cmap="viridis",
+        label=f"Spearman={spearman:0.4f}, P={p_val:0.4f}",
     )
-    plt.title(title)
-    plt.xlabel("Num Training Examples")
-    plt.ylabel("ROC AUC")
-    plt.legend()
 
-    if xlim is not None:
-        plt.xlim(0, xlim)
+    ax.set_title(title)
+    ax.set_xlabel("Num Training Examples")
+    ax.set_ylabel("ROC AUC")
+    ax.set_ylim(0, 1)
 
-    plt.ylim(0, 1)
+    if xlim:
+        ax.set_xlim(0, xlim)
 
-    if img_save_path is None:
-        plt.show()
+    ax.legend()
+
+    if img_save_path:
+        fig.savefig(img_save_path, bbox_inches="tight")
+        plt.close(fig)
     else:
-        plt.savefig(img_save_path)
+        plt.show()
+
+
+def graph_single_results(
+    score_file_path: PathLike,
+    img_save_dir: PathLike,
+    experiment_name: str | None = None,
+    auc_example_xlim: int = None,
+) -> None:
+    img_save_dir = pathlib.Path(img_save_dir)
+    variant_classes = [
+        None,
+        "Frameshift",
+        "3nt Deletion",
+        "Other",
+        "Nonsense",
+        "WT",
+        "Synonymous",
+        "Single Missense",
+    ]
+
+    data_df = pd.read_csv(score_file_path)
+    present_classes = set(data_df["aaChanges"].map(variant_classification).unique())
+    for variant_class in variant_classes:
+        if variant_class is not None and variant_class not in present_classes:
+            print(f"Skipping {variant_class}")
+            continue
+
+        file_stem_suffix = f"-{variant_class}" if variant_class is not None else ""
+        graph_score_distribution(
+            score_file_path,
+            variant_class=variant_class,
+            img_save_path=img_save_dir / f"score_distribution{file_stem_suffix}.png",
+            experiment_name=experiment_name,
+        )
+
+        graph_auc_examples(
+            score_file_path,
+            variant_class=variant_class,
+            img_save_path=img_save_dir / f"auc_v_examples{file_stem_suffix}.png",
+            experiment_name=experiment_name,
+            xlim=auc_example_xlim,
+        )
+
+    graph_score_distribution_by_variant(
+        score_file_path,
+        img_save_path=img_save_dir / "score_violin.png",
+        experiment_name=experiment_name,
+    )
 
 
 def graph_one_v_other(
@@ -394,5 +465,9 @@ def get_feature_clusters(
             plt.savefig(img_save_path)
 
 
-if __name__ == "__main__":
+def main():
     fire.Fire()
+
+
+if __name__ == "__main__":
+    main()
