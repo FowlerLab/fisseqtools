@@ -312,7 +312,7 @@ def train_ovwt(
         ]
 
 
-        if eval_one_split is not None:
+        if eval_two_split is not None:
             curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(
                 eval_two_wt_mask, get_var_mask(eval_two_split), eval_two_features
             )
