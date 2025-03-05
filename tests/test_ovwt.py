@@ -135,7 +135,7 @@ def test_train_ovwt():
             "index": [0] * 20 + [1] * 20 + [1] * 20,
         }
     )
-    eval_two_df = pd.DataFrame(
+    test_df = pd.DataFrame(
         {
             "label": ["A"] * 20 + ["B"] * 20 + ["C"] * 20,
             "index": [0] * 20 + [1] * 20 + [1] * 20,
@@ -157,7 +157,7 @@ def test_train_ovwt():
         eval_one_df,
         {"target_column": "label", "feature_columns": ["index"]},
         wt_key="A",
-        eval_two_split=eval_two_df,
+        test_split=test_df,
     )
 
     assert "A" not in models
@@ -236,7 +236,7 @@ def test_ovwt(tmp_path):
             "index": [0] * 20 + [1] * 20,
         }
     )
-    eval_two_df = pd.DataFrame(
+    test_df = pd.DataFrame(
         {
             "label": ["A"] * 20 + ["B"] * 20,
             "index": [0] * 20 + [1] * 20,
@@ -248,7 +248,7 @@ def test_ovwt(tmp_path):
 
     train_df.to_parquet(tmp_path / "train.parquet")
     eval_one_df.to_parquet(tmp_path / "eval_one.parquet")
-    eval_two_df.to_parquet(tmp_path / "eval_two.parquet")
+    test_df.to_parquet(tmp_path / "test.parquet")
     with open(tmp_path / "meta_data.json", "w") as f:
         json.dump(meta_data, f)
 
@@ -268,14 +268,14 @@ def test_ovwt(tmp_path):
         meta_data_json_path=str(tmp_path / "meta_data.json"),
         output_dir=str(output_dir),
         wt_key="A",
-        eval_two_data_path=str(tmp_path / "eval_two.parquet"),
+        test_data_path=str(tmp_path / "test.parquet"),
     )
 
     assert pathlib.Path(output_dir / "train_results.csv").is_file()
     assert pathlib.Path(output_dir / "models.pkl").is_file()
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
-    assert pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "test_shap.parquet").is_file()
 
     output_dir = tmp_path / "no_second_eval"
     output_dir.mkdir()
@@ -293,7 +293,7 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "models.pkl").is_file()
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
-    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "test_shap.parquet").is_file()
 
     output_dir = tmp_path / "shuffle_labels"
     output_dir.mkdir()
@@ -312,7 +312,7 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "models.pkl").is_file()
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
-    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "test_shap.parquet").is_file()
 
     output_dir = tmp_path / "single_feature"
     output_dir.mkdir()
@@ -330,7 +330,7 @@ def test_ovwt(tmp_path):
     assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
     assert pathlib.Path(output_dir / "selected_features.csv").is_file()
-    assert not pathlib.Path(output_dir / "eval_two_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "test_shap.parquet").is_file()
 
     output_dir_shap_only = tmp_path / "shap_only"
     output_dir_shap_only.mkdir()
@@ -341,13 +341,13 @@ def test_ovwt(tmp_path):
         eval_one_data_path=str(tmp_path / "eval_one.parquet"),
         meta_data_json_path=str(tmp_path / "meta_data.json"),
         output_dir=str(output_dir_shap_only),
-        eval_two_data_path=str(tmp_path / "eval_two.parquet"),
+        test_data_path=str(tmp_path / "test.parquet"),
         wt_key="A",
     )
 
     assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir_shap_only / "eval_shap.parquet").is_file()
-    assert pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()
+    assert pathlib.Path(output_dir_shap_only / "test_shap.parquet").is_file()
 
     output_dir_shap_only = tmp_path / "shap_only_no_second_eval"
     output_dir_shap_only.mkdir()
@@ -363,7 +363,7 @@ def test_ovwt(tmp_path):
 
     assert pathlib.Path(output_dir_shap_only / "train_shap.parquet").is_file()
     assert pathlib.Path(output_dir_shap_only / "eval_shap.parquet").is_file()
-    assert not pathlib.Path(output_dir_shap_only / "eval_two_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir_shap_only / "test_shap.parquet").is_file()
 
     input_dir = tmp_path / "stratified"
     input_dir.mkdir()

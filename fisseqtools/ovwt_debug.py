@@ -271,7 +271,6 @@ def train_ovwt(
         eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
         eval_two_features = np.random.normal(size=eval_two_features.shape)
         datasets.append("eval_two")
-        
 
     stats = ["roc_auc", "accuracy"]
     accuracy_roc = {
@@ -310,7 +309,6 @@ def train_ovwt(
             ("Train", curr_train_features, curr_train_labels),
             ("Eval", curr_eval_one_features, curr_eval_one_labels),
         ]
-
 
         if eval_two_split is not None:
             curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(

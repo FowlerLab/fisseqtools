@@ -217,7 +217,7 @@ def train_ovwt(
     eval_one_split: pd.DataFrame,
     meta_data: Dict[str, str | List[str]],
     wt_key: Optional[str] = "WT",
-    eval_two_split: Optional[pd.DataFrame] = None,
+    test_split: Optional[pd.DataFrame] = None,
     permutate_labels: bool = False,
 ) -> Tuple[Dict[str, sklearn.base.BaseEstimator], pd.DataFrame]:
     """
@@ -230,7 +230,7 @@ def train_ovwt(
             DataFrame containing the training data.
         eval_one_split (pd.DataFrame):
             DataFrame containing the first evaluation split.
-        eval_two_split (pd.DataFrame):
+        test_split (pd.DataFrame):
             DataFrame containing the second evaluation split.
         meta_data (Dict[str, str | List[str]]):
             Metadata containing column names for target and features.
@@ -252,9 +252,9 @@ def train_ovwt(
             eval_one_split[target_column].sample(frac=1).reset_index(drop=True)
         )
 
-        if eval_two_split is not None:
-            eval_two_split[target_column] = (
-                eval_two_split[target_column].sample(frac=1).reset_index(drop=True)
+        if test_split is not None:
+            test_split[target_column] = (
+                test_split[target_column].sample(frac=1).reset_index(drop=True)
             )
 
     get_features = functools.partial(
@@ -264,8 +264,8 @@ def train_ovwt(
     eval_one_wt_mask, eval_one_features = get_features(eval_one_split)
 
     datasets = ["eval", "train"]
-    if eval_two_split is not None:
-        datasets.append("eval_two")
+    if test_split is not None:
+        datasets.append("test")
 
     stats = ["roc_auc", "accuracy"]
     accuracy_roc = {
@@ -305,14 +305,12 @@ def train_ovwt(
             ("Eval", curr_eval_one_features, curr_eval_one_labels),
         ]
 
-        if eval_two_split is not None:
-            eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
-            curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(
-                eval_two_wt_mask, get_var_mask(eval_two_split), eval_two_features
+        if test_split is not None:
+            test_wt_mask, test_features = get_features(test_split)
+            curr_test_features, curr_test_labels = get_train_data_labels(
+                test_wt_mask, get_var_mask(test_split), test_features
             )
-            curr_datasets.append(
-                ("Eval Two", curr_eval_two_features, curr_eval_two_labels)
-            )
+            curr_datasets.append(("Test", curr_test_features, curr_test_labels))
 
         for name, features, labels in curr_datasets:
             roc_auc, accuracy = get_metrics(model, features, labels, dataset_name=name)
@@ -393,7 +391,7 @@ def ovwt(
     eval_one_data_path: PathLike,
     meta_data_json_path: PathLike,
     output_dir: PathLike,
-    eval_two_data_path: Optional[PathLike] = None,
+    test_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
     permutate_labels: bool = False,
 ) -> Tuple[
@@ -412,7 +410,7 @@ def ovwt(
             Path to the training data file.
         eval_one_data_path (PathLike):
             Path to the first evaluation data file.
-        eval_two_data_path (PathLike):
+        test_data_path (PathLike):
             Path to the second evaluation data file.
         meta_data_json_path (PathLike):
             Path to the metadata JSON file.
@@ -423,9 +421,9 @@ def ovwt(
     """
     train_split = pd.read_parquet(train_data_path)
     eval_one_split = pd.read_parquet(eval_one_data_path)
-    eval_two_split = None
-    if eval_two_data_path is not None:
-        eval_two_split = pd.read_parquet(eval_two_data_path)
+    test_split = None
+    if test_data_path is not None:
+        test_split = pd.read_parquet(test_data_path)
 
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
@@ -436,7 +434,7 @@ def ovwt(
         train_split=train_split,
         eval_one_split=eval_one_split,
         meta_data=meta_data,
-        eval_two_split=eval_two_split,
+        test_split=test_split,
         wt_key=wt_key,
         permutate_labels=permutate_labels,
     )
@@ -455,8 +453,8 @@ def ovwt(
         ("eval", eval_one_split),
     ]
 
-    if eval_two_split is not None:
-        shap_targets.append(("eval_two", eval_two_split))
+    if test_split is not None:
+        shap_targets.append(("test", test_split))
 
     for name, split in shap_targets:
         curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)
@@ -471,7 +469,7 @@ def ovwt_single_feature(
     eval_one_data_path: PathLike,
     meta_data_json_path: PathLike,
     output_dir: PathLike,
-    eval_two_data_path: Optional[PathLike] = None,
+    test_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
 ) -> None:
     output_dir = pathlib.Path(output_dir)
@@ -481,7 +479,7 @@ def ovwt_single_feature(
         eval_one_data_path,
         meta_data_json_path,
         output_dir,
-        eval_two_data_path,
+        test_data_path,
         wt_key,
     )
 
@@ -508,7 +506,7 @@ def ovwt_shap_only(
     eval_one_data_path: PathLike,
     meta_data_json_path: PathLike,
     output_dir: PathLike,
-    eval_two_data_path: Optional[PathLike] = None,
+    test_data_path: Optional[PathLike] = None,
     wt_key: Optional[str] = "WT",
 ) -> None:
     """
@@ -521,7 +519,7 @@ def ovwt_shap_only(
             Path to the training data file.
         eval_one_data_path (PathLike):
             Path to the first evaluation data file.
-        eval_two_data_path (PathLike):
+        test_data_path (PathLike):
             Path to the second evaluation data file.
         meta_data_json_path (PathLike):
             Path to the metadata JSON file.
@@ -532,9 +530,9 @@ def ovwt_shap_only(
     """
     train_split = pd.read_parquet(train_data_path)
     eval_one_split = pd.read_parquet(eval_one_data_path)
-    eval_two_split = None
-    if eval_two_data_path is not None:
-        eval_two_split = pd.read_parquet(eval_two_data_path)
+    test_split = None
+    if test_data_path is not None:
+        test_split = pd.read_parquet(test_data_path)
 
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
@@ -549,8 +547,8 @@ def ovwt_shap_only(
         ("eval", eval_one_split),
     ]
 
-    if eval_two_split is not None:
-        shap_targets.append(("eval_two", eval_two_split))
+    if test_split is not None:
+        shap_targets.append(("test", test_split))
 
     for name, split in shap_targets:
         curr_shap_df = get_shap_values(split, models, meta_data, wt_key, name)

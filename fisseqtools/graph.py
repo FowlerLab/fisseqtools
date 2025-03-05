@@ -59,6 +59,7 @@ def graph_score_distribution(
     variant_class: str | None = None,
     img_save_path: PathLike | None = None,
     experiment_name: str | None = None,
+    graph_column: str = "eval_roc_auc",
 ) -> None:
     data_df = pd.read_csv(score_file_path)
     data_df.dropna(inplace=True)
@@ -71,7 +72,7 @@ def graph_score_distribution(
         data_df = data_df[variant_classes == variant_class]
         title += f" ({variant_class})"
 
-    scores = data_df["eval_roc_auc"]
+    scores = data_df[graph_column]
     mean_score = scores.mean()
     median_score = scores.median()
 
