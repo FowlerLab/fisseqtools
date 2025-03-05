@@ -64,7 +64,7 @@ def train_xgboost(
     ).fit(
         x_train,
         y_train,
-        eval_set=[(x_train, y_train), (x_eval, y_eval)],
+        eval_set=[(x_train, y_train)],
         sample_weight=sample_weight,
         verbose=True,
     )
