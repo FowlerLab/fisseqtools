@@ -64,7 +64,7 @@ def train_xgboost(
     ).fit(
         x_train,
         y_train,
-        eval_set=[(x_train, y_train)],
+        eval_set=[(x_train, y_train), (x_eval, y_eval)],
         sample_weight=sample_weight,
         verbose=True,
     )
@@ -262,13 +262,16 @@ def train_ovwt(
     )
     train_wt_mask, train_features = get_features(train_split)
     eval_one_wt_mask, eval_one_features = get_features(eval_one_split)
-
+    eval_two_wt_mask, eval_two_features = None, None
     train_features = np.random.normal(size=train_features.shape)
     eval_one_features = np.random.normal(size=eval_one_features.shape)
-
     datasets = ["eval", "train"]
+
     if eval_two_split is not None:
+        eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
+        eval_two_features = np.random.normal(size=eval_two_features.shape)
         datasets.append("eval_two")
+        
 
     stats = ["roc_auc", "accuracy"]
     accuracy_roc = {
@@ -308,8 +311,8 @@ def train_ovwt(
             ("Eval", curr_eval_one_features, curr_eval_one_labels),
         ]
 
-        if eval_two_split is not None:
-            eval_two_wt_mask, eval_two_features = get_features(eval_two_split)
+
+        if eval_one_split is not None:
             curr_eval_two_features, curr_eval_two_labels = get_train_data_labels(
                 eval_two_wt_mask, get_var_mask(eval_two_split), eval_two_features
             )
@@ -439,7 +442,7 @@ def ovwt(
         train_split=train_split,
         eval_one_split=eval_one_split,
         meta_data=meta_data,
-        eval_two_split=eval_two_split,
+        eval_two_split=eval_one_split,
         wt_key=wt_key,
         permutate_labels=permutate_labels,
     )
