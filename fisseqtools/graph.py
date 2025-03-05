@@ -61,6 +61,7 @@ def graph_score_distribution(
     experiment_name: str | None = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
+    data_df.dropna(inplace=True)
     title: str = "Eval ROC AUC Distribution"
     if experiment_name is not None:
         title = f"{title}: {experiment_name}"
@@ -105,6 +106,7 @@ def graph_score_distribution_by_variant(
     experiment_name: str | None = None,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
+    data_df.dropna(inplace=True)
     data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
     mean_score = data_df["eval_roc_auc"].mean()
 
@@ -210,6 +212,7 @@ def graph_single_results(
     ]
 
     data_df = pd.read_csv(score_file_path)
+    data_df.dropna(inplace=True)
     present_classes = set(data_df["aaChanges"].map(variant_classification).unique())
     for variant_class in variant_classes:
         if variant_class is not None and variant_class not in present_classes:
@@ -224,6 +227,7 @@ def graph_single_results(
             experiment_name=experiment_name,
         )
 
+        """
         graph_auc_examples(
             score_file_path,
             variant_class=variant_class,
@@ -231,6 +235,7 @@ def graph_single_results(
             experiment_name=experiment_name,
             xlim=auc_example_xlim,
         )
+        """
 
     graph_score_distribution_by_variant(
         score_file_path,
@@ -463,6 +468,15 @@ def get_feature_clusters(
             plt.show()
         else:
             plt.savefig(img_save_path)
+
+
+def split_replicate(train_results_path: PathLike) -> None:
+    train_results_dir = pathlib.Path(train_results_path).parent
+    train_results_df = pd.read_csv(train_results_path)
+    r1_df = train_results_df[train_results_df["replicate"] == 1]
+    r2_df = train_results_df[train_results_df["replicate"] == 2]
+    r1_df.to_csv(train_results_dir / "train_results_r1.csv")
+    r2_df.to_csv(train_results_dir / "train_results_r2.csv")
 
 
 def main():

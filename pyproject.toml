@@ -41,6 +41,7 @@ dev = [
 [project.scripts]
 fisseq-graph = "fisseqtools.graph:main"
 fisseq-ovwt = "fisseqtools.ovwt:main"
+fisseq-ovwt-debug = "fisseqtools.ovwt_debug:main"
 
 [tool.setuptools]
 packages = ["fisseqtools"]
