@@ -750,6 +750,7 @@ def main():
             "xgb-stratified": functools.partial(ovwt_stratified, train_xgboost),
             "shap_only": ovwt_shap_only,
             "single_feature": ovwt_single_feature,
+            "xgb-wtvwt-control": functools.partial(wtvwt_control, train_xgboost)
         }
     )
 
