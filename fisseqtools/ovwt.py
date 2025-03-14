@@ -620,6 +620,128 @@ def ovwt_stratified(
         pickle.dump(models, f)
 
 
+def sample_and_change_rows(
+    data_df: pd.DataFrame,
+    sample_proportion: float,
+    target_column: str,
+    modifier_string: str,
+) -> pd.DataFrame:
+    data_df = data_df.copy()
+    sampled_idx = data_df.sample(
+        n=int(len(data_df) * sample_proportion), random_state=42
+    ).index
+    mask = data_df.index.isin(sampled_idx)
+    data_df.loc[mask, target_column] += modifier_string
+
+    return data_df
+
+
+def wtvwt_control(
+    train_fun: TrainFun,
+    train_data_path: PathLike,
+    eval_one_data_path: PathLike,
+    meta_data_json_path: PathLike,
+    output_dir: PathLike,
+    test_data_path: Optional[PathLike] = None,
+    wt_key: Optional[str] = "WT",
+    num_iters: int = 100,
+    sample_proportion: float = 0.5,
+) -> None:
+    with open(meta_data_json_path) as f:
+        meta_data = json.load(f)
+
+    target_column = meta_data["target_column"]
+    train_split = pd.read_parquet(train_data_path)
+    train_split = train_split[train_split[target_column] == wt_key]
+    eval_one_split = pd.read_parquet(eval_one_data_path)
+    eval_one_split = eval_one_split[eval_one_split[target_column] == wt_key]
+
+    test_split = None
+    if test_data_path is not None:
+        test_split = pd.read_parquet(test_data_path)
+        test_split = test_split[test_split[target_column] == wt_key]
+
+    output_dir = pathlib.Path(output_dir)
+    models = dict()
+    accuracy_roc = list()
+    train_shap = list()
+    eval_shap = list()
+    test_shap = list()
+
+    for i in range(num_iters):
+        print("=" * 10 + f" WT vs. WT Iteration: {i + 1} " + "=" * 10)
+        curr_train_split = sample_and_change_rows(
+            train_split, sample_proportion, target_column, f"_{i}"
+        )
+        curr_eval_split = sample_and_change_rows(
+            eval_one_split, sample_proportion, target_column, f"_{i}"
+        )
+        curr_test_split = None
+
+        if test_split is not None:
+            curr_test_split = sample_and_change_rows(
+                test_split, sample_proportion, target_column, f"_{i}"
+            )
+
+        next_models, next_accuracy_roc = train_ovwt(
+            train_fun=train_fun,
+            train_split=curr_train_split,
+            eval_one_split=curr_eval_split,
+            meta_data=meta_data,
+            test_split=curr_test_split,
+            wt_key=wt_key,
+        )
+
+        train_shap.append(
+            get_shap_values(
+                curr_train_split,
+                next_models,
+                meta_data,
+                wt_key=wt_key,
+                dset_name="train",
+            )
+        )
+        eval_shap.append(
+            get_shap_values(
+                curr_eval_split,
+                next_models,
+                meta_data,
+                wt_key=wt_key,
+                dset_name="eval"
+            )
+        )
+
+        if test_split is not None:
+            test_shap.append(
+                get_shap_values(
+                    curr_test_split,
+                    next_models,
+                    meta_data,
+                    wt_key=wt_key,
+                    dset_name="test",
+                )
+            )
+
+        accuracy_roc.append(next_accuracy_roc)
+        models.update(next_models)
+
+    accuracy_roc = pd.concat(accuracy_roc, axis=0)
+    accuracy_roc = accuracy_roc.sort_values(by=target_column, ascending=False)
+    accuracy_roc.to_csv(output_dir / "train_results.csv")
+
+    with open(output_dir / "models.pkl", "wb") as f:
+        pickle.dump(models, f)
+
+    pd.concat(train_shap, axis=0).to_parquet(output_dir / "train_shap.parquet")
+    pd.concat(eval_shap, axis=0).to_parquet(output_dir / "eval_shap.parquet")
+
+    if test_split is not None:
+        pd.concat(test_shap, axis=0).to_parquet(output_dir / "test_shap.parquet")
+
+    feature_columns = eval_one_split[meta_data["feature_columns"]].columns
+    return models, meta_data, list(feature_columns)
+
+
 def main():
     """Setup CLI"""
     fire.Fire(

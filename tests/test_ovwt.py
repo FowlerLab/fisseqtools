@@ -20,6 +20,7 @@ from fisseqtools.ovwt import (
     train_ovwt,
     train_xgboost,
     train_single_feature_xgboost,
+    wtvwt_control,
 )
 
 
@@ -397,3 +398,42 @@ def test_ovwt(tmp_path):
 
     assert pathlib.Path(output_dir / "train_results.csv").is_file()
     assert pathlib.Path(output_dir / "models.pkl").is_file()
+
+    output_dir = tmp_path / "wtvwt"
+    output_dir.mkdir()
+
+    wtvwt_control(
+        train_fun=train_fun,
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        wt_key="A",
+        num_iters=5,
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()
+    assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert not pathlib.Path(output_dir / "test_shap.parquet").is_file()
+
+    output_dir = tmp_path / "wtvwt-test"
+    output_dir.mkdir()
+
+    wtvwt_control(
+        train_fun=train_fun,
+        train_data_path=str(tmp_path / "train.parquet"),
+        eval_one_data_path=str(tmp_path / "eval_one.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        test_data_path=str(tmp_path / "test.parquet"),
+        output_dir=str(output_dir),
+        wt_key="A",
+        num_iters=5,
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
+    assert pathlib.Path(output_dir / "models.pkl").is_file()
+    assert pathlib.Path(output_dir / "train_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "eval_shap.parquet").is_file()
+    assert pathlib.Path(output_dir / "test_shap.parquet").is_file()
