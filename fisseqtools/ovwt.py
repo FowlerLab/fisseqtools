@@ -627,9 +627,7 @@ def sample_and_change_rows(
     modifier_string: str,
 ) -> pd.DataFrame:
     data_df = data_df.copy()
-    sampled_idx = data_df.sample(
-        n=int(len(data_df) * sample_proportion), random_state=42
-    ).index
+    sampled_idx = data_df.sample(n=int(len(data_df) * sample_proportion)).index
     mask = data_df.index.isin(sampled_idx)
     data_df.loc[mask, target_column] += modifier_string
 
