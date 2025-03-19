@@ -42,6 +42,7 @@ dev = [
 fisseq-graph = "fisseqtools.graph:main"
 fisseq-ovwt = "fisseqtools.ovwt:main"
 fisseq-ovwt-debug = "fisseqtools.ovwt_debug:main"
+fisseq-simple-split = "fisseqtools.simple_split:main"
 
 [tool.setuptools]
 packages = ["fisseqtools"]

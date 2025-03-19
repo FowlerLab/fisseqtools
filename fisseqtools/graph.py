@@ -2,6 +2,7 @@ import pathlib
 import json
 import random
 import re
+import warnings
 from os import PathLike
 
 import fire
@@ -301,8 +302,31 @@ def graph_one_v_other(
         plt.savefig(img_save_path)
 
 
+def _finalize_pca_plot_stacked(
+    fig: plt.Figure,
+    ax_class: plt.Axes,
+    ax_dist: plt.Axes,
+    title: str,
+    img_save_path: PathLike | None,
+) -> None:
+    ax_class.set_title(title)
+
+    for ax in [ax_class, ax_dist]:
+        ax.set_xlabel("UMAP One")
+        ax.set_ylabel("UMAP Two")
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path, dpi=150)
+
+
 def _finalize_pca_plot(
-    fig: plt.Figure, ax: plt.Axes, title: str, img_save_path: PathLike | None
+    fig: plt.Figure,
+    ax: plt.Axes,
+    title: str,
+    img_save_path: PathLike | None,
 ) -> None:
     ax.set_title(title)
     ax.set_xlabel("UMAP One")
@@ -312,28 +336,26 @@ def _finalize_pca_plot(
         plt.show()
         plt.close(fig)
     else:
-        fig.savefig(img_save_path)
+        fig.savefig(img_save_path, dpi=150)
 
 
 def _color_by_class(
     data_df: pd.DataFrame,
     shap_scores: np.ndarray,
-    title: str,
-    img_save_path: PathLike | None,
+    ax: plt.Axes,
 ) -> None:
     data_df["Variant Class"] = data_df["aaChanges"].apply(variant_classification)
 
     variant_type_palette = {
         "Single Missense": "grey",
         "Synonymous": "darkgreen",
-        "WT": "grey",
+        "WT": "red",
         "Frameshift": "purple",
         "3nt Deletion": "grey",
         "Nonsense": "purple",
         "Other": "grey",
     }
 
-    fig, ax = plt.subplots()
     sns.scatterplot(
         data=data_df,
         x=shap_scores[:, 0].flatten(),
@@ -341,20 +363,17 @@ def _color_by_class(
         hue="Variant Class",
         palette=variant_type_palette,
         s=40,
+        ax=ax,
     )
-
-    _finalize_pca_plot(fig, ax, title, img_save_path)
 
 
 def _color_by_distance(
     data_df: pd.DataFrame,
     shap_scores: np.ndarray,
     distance_measure: str,
-    title: str,
-    img_save_path: PathLike | None,
+    fig: plt.Figure,
+    ax: plt.Axes,
 ) -> None:
-    fig, ax = plt.subplots()
-
     sns.scatterplot(
         x=shap_scores[:, 0].flatten(),
         y=shap_scores[:, 1].flatten(),
@@ -368,8 +387,6 @@ def _color_by_distance(
     sm.set_array([])
     cbar = fig.colorbar(sm, ax=ax)
     cbar.set_label(distance_measure)
-
-    _finalize_pca_plot(fig, ax, title, img_save_path)
 
 
 def _pca(shap_scores: np.ndarray, pca_n_components: int) -> np.ndarray:
@@ -386,22 +403,26 @@ def _cluster_reduction(shap_scores: np.ndarray, cluster_assignments: int) -> Non
     return shap_scores @ cluster_matrix
 
 
-def umap_shap(
-    shap_file_path: PathLike,
-    pca_n_components: int = 50,
-    umap_n_neighbors: int = 5,
-    umap_min_dist: float = 0.1,
-    aggregate: bool = True,
-    train_results_path: PathLike | None = None,
-    color_by_distance: bool = True,
-    color_by_class: bool = True,
-    img_save_path: PathLike | None = None,
-    cluster_assignments: PathLike | None = None,
-    reduce_dimensions: bool = True,
-    graph_column: str = "test_roc_auc",
-    components_save_path: str | None = None,
-    experiment_name: str | None = None,
-) -> None:
+def _prepare_shap_scores(
+    shap_file_path: pathlib.Path,
+    aggregate: bool,
+    cluster_assignments: pathlib.Path | None,
+    pca_n_components: int,
+    reduce_dimensions: bool,
+) -> tuple[pd.DataFrame, np.ndarray]:
+    """
+    Loads and processes SHAP scores from a Parquet file.
+
+    Args:
+        shap_file_path (PathLike): Path to the SHAP scores file.
+        aggregate (bool): Whether to aggregate data by 'aaChanges'.
+        cluster_assignments (PathLike | None): Path to cluster assignments.
+        pca_n_components (int): Number of PCA components.
+        reduce_dimensions (bool): Whether to reduce dimensions.
+
+    Returns:
+        tuple: Processed DataFrame and transformed SHAP scores (numpy array).
+    """
     data_df = pd.read_parquet(shap_file_path)
     if aggregate:
         data_df = data_df.groupby("aaChanges", as_index=False).mean()
@@ -420,22 +441,53 @@ def umap_shap(
             shap_scores = _cluster_reduction(shap_scores, cluster_idx)
 
     shap_scores = sklearn.preprocessing.StandardScaler().fit_transform(shap_scores)
+    return data_df, shap_scores
+
+
+def umap_shap(
+    shap_file_path: pathlib.Path,
+    pca_n_components: int = 50,
+    umap_n_neighbors: int = 5,
+    umap_min_dist: float = 0.1,
+    aggregate: bool = True,
+    train_results_path: pathlib.Path | None = None,
+    color_by_distance: bool = True,
+    color_by_class: bool = True,
+    img_save_path: pathlib.Path | None = None,
+    cluster_assignments: pathlib.Path | None = None,
+    reduce_dimensions: bool = True,
+    graph_column: str = "test_roc_auc",
+    save_components: bool = True,
+    experiment_name: str | None = None,
+    stack_plots: bool = True,
+) -> None:
+    """Processes SHAP scores using UMAP and visualizes results."""
+    data_df, shap_scores = _prepare_shap_scores(
+        shap_file_path,
+        aggregate,
+        cluster_assignments,
+        pca_n_components,
+        reduce_dimensions,
+    )
+
     shap_scores = umap.UMAP(
         n_neighbors=umap_n_neighbors,
         n_components=2,
         min_dist=umap_min_dist,
-        random_state=SEED,  # Set UMAP random seed for reproducibility
+        random_state=SEED,
         metric="cosine",
     ).fit_transform(shap_scores)
 
-    if components_save_path is not None:
+    if save_components and img_save_path is not None:
         pd.DataFrame(
             {
                 "aaChanges": data_df["aaChanges"],
                 "umap_one": shap_scores[:, 0].flatten(),
                 "umap_two": shap_scores[:, 1].flatten(),
             }
-        ).to_csv(components_save_path)
+        ).to_csv(pathlib.Path(img_save_path) / "umap_components.csv")
+    elif save_components:
+        warnings.warn("img_save_path must be set to save UMAP components.")
 
     if train_results_path is not None:
         train_res_df = pd.read_csv(train_results_path)
@@ -444,22 +496,58 @@ def umap_shap(
     title = "Variant SHAP Score UMAP" + ("" if not aggregate else " (Aggregated)")
     title = f"{title} ({experiment_name})" if experiment_name else title
 
-    if color_by_distance:
-        curr_save_path = None
-        if img_save_path is not None:
-            curr_save_path = pathlib.Path(img_save_path) / "umap_by_distance.png"
+    fig_size = (8, 10)
+    if stack_plots and color_by_distance and color_by_class:
+        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=fig_size)
+        fig_class, ax_class = fig, axes[0]
+        fig_dist, ax_dist = fig, axes[1]
+    else:
+        fig_class, ax_class = plt.subplots(figsize=fig_size)
+        fig_dist, ax_dist = plt.subplots(figsize=fig_size)
 
+    if color_by_distance:
         distance_measure = "p_is_var" if train_results_path is None else graph_column
-        _color_by_distance(
-            data_df, shap_scores, distance_measure, title, curr_save_path
-        )
+        _color_by_distance(data_df, shap_scores, distance_measure, fig_dist, ax_dist)
+
+        if not stack_plots:
+            _finalize_pca_plot(
+                fig_dist,
+                ax_dist,
+                title,
+                (
+                    None
+                    if img_save_path is None
+                    else pathlib.Path(img_save_path) / "umap_by_distance.png"
+                ),
+            )
 
     if color_by_class:
-        curr_save_path = None
-        if img_save_path is not None:
-            curr_save_path = pathlib.Path(img_save_path) / "umap_by_class.png"
+        _color_by_class(data_df, shap_scores, ax_class)
 
-        _color_by_class(data_df, shap_scores, title, curr_save_path)
+        if not stack_plots:
+            _finalize_pca_plot(
+                fig_class,
+                ax_class,
+                title,
+                (
+                    None
+                    if img_save_path is None
+                    else pathlib.Path(img_save_path) / "umap_by_class.png"
+                ),
+            )
+
+    if stack_plots:
+        _finalize_pca_plot_stacked(
+            fig,
+            ax_class,
+            ax_dist,
+            title,
+            (
+                None
+                if img_save_path is None
+                else pathlib.Path(img_save_path) / "umap_stacked.png"
+            ),
+        )
 
 
 def get_feature_clusters(
@@ -542,6 +630,30 @@ def split_replicate(train_results_path: PathLike) -> None:
     r2_df = train_results_df[train_results_df["replicate"] == 2]
     r1_df.to_csv(train_results_dir / "train_results_r1.csv")
     r2_df.to_csv(train_results_dir / "train_results_r2.csv")
+
+
+def combine_results(
+    results_one_dir: PathLike,
+    results_two_dir: PathLike,
+    results_output_dir: PathLike,
+) -> None:
+    results_one_dir = pathlib.Path(results_one_dir)
+    results_two_dir = pathlib.Path(results_two_dir)
+    results_output_dir = pathlib.Path(results_output_dir)
+
+    for file in ["train_results.csv", "test_shap.parquet"]:
+        if file.endswith(".csv"):
+            load_fun = pd.read_csv
+            dump_fun = lambda x: x.to_csv(results_output_dir / file)
+        else:
+            load_fun = pd.read_parquet
+            dump_fun = lambda x: x.to_parquet(results_output_dir / file)
+
+        dump_fun(
+            pd.concat(
+                (load_fun(results_one_dir / file), load_fun(results_two_dir / file))
+            )
+        )
 
 
 def main():

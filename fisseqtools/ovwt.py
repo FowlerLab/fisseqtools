@@ -701,11 +701,7 @@ def wtvwt_control(
         )
         eval_shap.append(
             get_shap_values(
-                curr_eval_split,
-                next_models,
-                meta_data,
-                wt_key=wt_key,
-                dset_name="eval"
+                curr_eval_split, next_models, meta_data, wt_key=wt_key, dset_name="eval"
             )
         )
 
@@ -748,7 +744,7 @@ def main():
             "xgb-stratified": functools.partial(ovwt_stratified, train_xgboost),
             "shap_only": ovwt_shap_only,
             "single_feature": ovwt_single_feature,
-            "xgb-wtvwt-control": functools.partial(wtvwt_control, train_xgboost)
+            "xgb-wtvwt-control": functools.partial(wtvwt_control, train_xgboost),
         }
     )
 
