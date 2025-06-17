@@ -564,6 +564,7 @@ def ovwt_stratified(
     stratify_column: str,
     wt_key: Optional[str] = "WT",
     permutate_labels: bool = False,
+    test_data_path: Optional[PathLike] = None,
 ) -> None:
     """
     Trains models separately for each unique value in the stratification column
@@ -590,6 +591,7 @@ def ovwt_stratified(
     """
     train_split = pd.read_parquet(train_data_path)
     eval_split = pd.read_parquet(eval_one_data_path)
+    test_split = None if test_data_path is None else pd.read_parquet(test_data_path)
 
     with open(meta_data_json_path) as f:
         meta_data = json.load(f)
@@ -609,6 +611,7 @@ def ovwt_stratified(
             meta_data=meta_data,
             wt_key=wt_key,
             permutate_labels=permutate_labels,
+            test_split=test_split,
         )
 
         accuracy_roc[stratify_column] = curr_value

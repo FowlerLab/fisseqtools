@@ -1,22 +1,28 @@
 import pathlib
 import json
+import multiprocessing
 import random
 import re
 import warnings
 from os import PathLike
+from multiprocessing import Pool, cpu_count
+from typing import Tuple, List
 
 import fire
 import matplotlib.pyplot as plt
+import matplotlib.widgets
 import numpy as np
 import pandas as pd
 import scipy.cluster.hierarchy
-import scipy.sparse
 import seaborn as sns
 import scipy.cluster.hierarchy
 import scipy.spatial.distance
 import scipy.stats
+import scipy.integrate
 import sklearn.decomposition
+import sklearn.metrics.pairwise
 import sklearn.preprocessing
+import tqdm
 import umap
 
 # Set a global random seed for reproducibility
@@ -85,7 +91,7 @@ def graph_score_distribution(
 
     fig, ax = plt.subplots(figsize=(10, 6))
     sns.histplot(scores, kde=False, alpha=0.5, stat="density", ax=ax)
-    sns.kdeplot(scores, shade=True, ax=ax)
+    sns.kdeplot(scores, fill=True, ax=ax)
 
     ax.axvline(
         x=median_score,
@@ -155,6 +161,7 @@ def graph_auc_examples(
     experiment_name: str | None = None,
     xlim: int = None,
     graph_column: str = "test_roc_auc",
+    window_size: int = 10,
 ) -> None:
     data_df = pd.read_csv(score_file_path)
     data_df = data_df.dropna()
@@ -179,13 +186,36 @@ def graph_auc_examples(
         spearman, p_val = float("NaN"), float("NaN")
         z = np.ones_like(auc_roc)
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(10, 6), dpi=150)
     ax.scatter(
         example_counts,
         auc_roc,
         c=z,
         cmap="viridis",
         label=f"Spearman={spearman:0.4f}, P={p_val:0.4f}",
+        s=10,
+    )
+
+    # graph rolling average
+    example_counts = data_df["Example Count"].to_numpy()
+    auc_roc = data_df[graph_column].to_numpy()
+    mean_score = auc_roc.mean()
+    idx = np.argsort(example_counts)
+    example_counts = example_counts[idx]
+    auc_roc = auc_roc[idx]
+    mean_auc_roc = (
+        pd.Series(auc_roc).rolling(window=window_size, center=True).mean().to_numpy()
+    )
+
+    ax.plot(
+        example_counts,
+        mean_auc_roc,
+        label=f"Rolling Average (window = {window_size})",
+        color="red",
+    )
+
+    ax.axhline(
+        y=mean_score, color="red", linestyle="--", label=f"Mean = {mean_score:.2f}"
     )
 
     ax.set_title(title)
@@ -199,7 +229,7 @@ def graph_auc_examples(
     ax.legend()
 
     if img_save_path:
-        fig.savefig(img_save_path, bbox_inches="tight")
+        fig.savefig(img_save_path)
         plt.close(fig)
     else:
         plt.show()
@@ -209,7 +239,8 @@ def graph_single_results(
     score_file_path: PathLike,
     img_save_dir: PathLike,
     experiment_name: str | None = None,
-    auc_example_xlim: int = None,
+    auc_example_xlim: int | None = None,
+    auc_example_window: int = 20,
     graph_column: str = "test_roc_auc",
 ) -> None:
     img_save_dir = pathlib.Path(img_save_dir)
@@ -248,6 +279,7 @@ def graph_single_results(
             experiment_name=experiment_name,
             xlim=auc_example_xlim,
             graph_column=graph_column,
+            window_size=auc_example_window,
         )
 
     graph_score_distribution_by_variant(
@@ -496,9 +528,9 @@ def umap_shap(
     title = "Variant SHAP Score UMAP" + ("" if not aggregate else " (Aggregated)")
     title = f"{title} ({experiment_name})" if experiment_name else title
 
-    fig_size = (8, 10)
+    fig_size = (16, 9)
     if stack_plots and color_by_distance and color_by_class:
-        fig, axes = plt.subplots(nrows=2, ncols=1, figsize=fig_size)
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=fig_size)
         fig_class, ax_class = fig, axes[0]
         fig_dist, ax_dist = fig, axes[1]
     else:
@@ -656,6 +688,615 @@ def combine_results(
         )
 
 
+def cosine_similarity_matrix(
+    data_path: PathLike,
+    meta_data_path: PathLike,
+    output_file: PathLike,
+    demean_only: bool = False,
+    shuffle_columns: bool = False,
+    n_pca_components: int | None = None,
+) -> None:
+    data_df = pd.read_parquet(data_path)
+    with open(meta_data_path) as f:
+        meta_data = json.load(f)
+
+    all_columns = meta_data["feature_columns"] + [meta_data["target_column"]]
+    data_df = data_df[all_columns]
+    data_df = data_df.groupby(meta_data["target_column"], as_index=False).median()
+    data_df = data_df[data_df[meta_data["target_column"]] != "WT"]
+    feature_matrix = data_df[meta_data["feature_columns"]].to_numpy()
+
+    if shuffle_columns:
+        rng = np.random.default_rng(seed=42)
+        for col_idx in range(feature_matrix.shape[1]):
+            rng.shuffle(feature_matrix[:, col_idx])
+
+    if isinstance(n_pca_components, int):
+        feature_matrix = sklearn.decomposition.PCA(
+            n_components=n_pca_components
+        ).fit_transform(feature_matrix)
+
+    if demean_only:
+        means = np.mean(feature_matrix, axis=0, keepdims=True)
+        feature_matrix = feature_matrix - means
+    else:
+        feature_matrix = sklearn.preprocessing.StandardScaler().fit_transform(
+            feature_matrix
+        )
+
+    cosine_similarity = sklearn.metrics.pairwise.cosine_similarity(feature_matrix)
+    pd.DataFrame(
+        cosine_similarity,
+        index=data_df[meta_data["target_column"]],
+        columns=data_df[meta_data["target_column"]],
+    ).to_csv(output_file)
+
+    ranks = np.argsort(cosine_similarity, axis=0)
+    pd.DataFrame(
+        ranks[::-1],
+        index=data_df[meta_data["target_column"]],
+        columns=data_df[meta_data["target_column"]],
+    ).to_csv("rank_" + output_file)
+
+
+def plot_feature_distribution(
+    data_path: PathLike,
+    meta_data_path: PathLike,
+    standardize: bool = True,
+    title: str = "Standardized feature distribution",
+    image_save_path: PathLike | None = None,
+) -> None:
+    data_df = pd.read_parquet(data_path)
+    with open(meta_data_path) as f:
+        meta_data = json.load(f)
+
+    all_columns = meta_data["feature_columns"] + [meta_data["target_column"]]
+    data_df = data_df[all_columns]
+    data_df = data_df.groupby(meta_data["target_column"], as_index=False).median()
+    data_df = data_df[data_df[meta_data["target_column"]] != "WT"]
+    feature_matrix = data_df[meta_data["feature_columns"]].to_numpy()
+
+    if standardize:
+        feature_matrix = sklearn.preprocessing.StandardScaler().fit_transform(
+            feature_matrix
+        )
+
+    feature_matrix = feature_matrix.flatten()
+    fig, ax = plt.subplots()
+    sns.histplot(x=feature_matrix, discrete=False, kde=True, ax=ax)
+    ax.set_title(title)
+
+    if image_save_path is not None:
+        fig.savefig(image_save_path)
+    else:
+        plt.show()
+
+
+def get_sparcity(
+    data_path: PathLike,
+    meta_data_path: PathLike,
+    axis=1,
+) -> np.ndarray:
+    data_df = pd.read_parquet(data_path)
+    with open(meta_data_path) as f:
+        meta_data = json.load(f)
+
+    all_columns = meta_data["feature_columns"] + [meta_data["target_column"]]
+    data_df = data_df[all_columns]
+    data_df = data_df.groupby(meta_data["target_column"], as_index=False).median()
+    data_df = data_df[data_df[meta_data["target_column"]] != "WT"]
+    feature_matrix = data_df[meta_data["feature_columns"]].to_numpy()
+    feature_matrix = ~np.isclose(feature_matrix, 0.0)
+    feature_matrix = feature_matrix.sum(axis=axis)
+
+    return feature_matrix
+
+def plot_example_sparcity(
+    feature_data_path: PathLike,
+    shap_data_path: PathLike,
+    meta_data_path: PathLike,
+    image_save_path: PathLike | None = None,
+) -> None:
+    feature_sparcity = get_sparcity(feature_data_path, meta_data_path)
+    shap_sparcity = get_sparcity(shap_data_path, meta_data_path)
+    fig, ax = plt.subplots()
+    
+    sns.histplot(
+        x=feature_sparcity,
+        discrete=True,
+        kde=True,
+        label="Features",
+        alpha=0.5,
+        color="orange",
+        ax=ax,
+    )
+
+    sns.histplot(
+        x=shap_sparcity,
+        discrete=True,
+        kde=True,
+        label="Shap values",
+        alpha=0.5,
+        color="blue",
+        ax=ax,
+    )
+
+    ax.legend()
+    ax.set_xlabel("Number of non-zero elemenets")
+    ax.set_ylabel("Frequency")
+    ax.set_title("Distribution of number of non-zero elements over feature vectors")
+
+    if image_save_path is not None:
+        fig.savefig(image_save_path)
+    else:
+        plt.show()
+
+
+def plot_feature_sparcity(
+    feature_data_path: PathLike,
+    shap_data_path: PathLike,
+    meta_data_path: PathLike,
+    image_save_path: PathLike | None = None,
+) -> None:
+    feature_sparcity = get_sparcity(feature_data_path, meta_data_path, axis=0)
+    shap_sparcity = get_sparcity(shap_data_path, meta_data_path, axis=0)
+    fig, ax = plt.subplots()
+    
+    sns.histplot(
+        x=feature_sparcity,
+        discrete=True,
+        kde=True,
+        label="Features",
+        alpha=0.5,
+        color="orange",
+        ax=ax,
+    )
+
+    """
+    sns.histplot(
+        x=shap_sparcity,
+        discrete=True,
+        kde=True,
+        label="Shap values",
+        alpha=0.5,
+        color="blue",
+        ax=ax,
+    )
+    """
+
+    ax.legend()
+    ax.set_xlabel("Number of non-zero elemenets")
+    ax.set_ylabel("Frequency")
+    ax.set_title("Distribution of number of non-zero elements over feature columns")
+
+    if image_save_path is not None:
+        fig.savefig(image_save_path)
+    else:
+        plt.show()
+
+
+def process_variant(
+    args: Tuple[str, np.ndarray, np.ndarray, np.ndarray]
+) -> Tuple[str, List[np.ndarray]]:
+    curr_var, aa_changes, data_col, shap_col = args
+    data_row = aa_changes[data_col]
+    shap_row = aa_changes[shap_col]
+    shared_neighbors = [
+        len(np.intersect1d(data_row[: i + 1], shap_row[: i + 1]))
+        for i in range(len(aa_changes))
+    ]
+
+    return curr_var, shared_neighbors
+
+
+def rank_changes(data_rank_path: PathLike, shap_rank_path: PathLike) -> None:
+    data_df = pd.read_csv(data_rank_path)
+    shap_df = pd.read_csv(shap_rank_path)
+
+    aa_changes = data_df["aaChanges"].to_numpy()
+    data_df = data_df.drop("aaChanges", axis=1)
+    shap_df = shap_df.drop("aaChanges", axis=1)
+
+    rank_changes_arr = np.abs(data_df.to_numpy() - shap_df.to_numpy())
+    pd.DataFrame(
+        {
+            "aaChanges": aa_changes,
+            "median_rank_change": np.median(rank_changes_arr, axis=0).flatten(),
+            "mean_rank_change": np.mean(rank_changes_arr, axis=0).flatten(),
+        }
+    ).to_csv("rank_change.csv", index=False)
+
+    variant_names = data_df.columns.tolist()
+    _, aa_idx = np.unique(aa_changes, return_inverse=True)
+    args_list = [
+        (
+            var,
+            aa_idx,
+            data_df[var].to_numpy().astype(int),
+            shap_df[var].to_numpy().astype(int),
+        )
+        for var in variant_names
+    ]
+
+    with multiprocessing.Pool(processes=multiprocessing.cpu_count()) as pool:
+        results = list(
+            tqdm.tqdm(
+                pool.imap(process_variant, args_list),
+                total=len(args_list),
+                desc="processing variants",
+            )
+        )
+
+    rank_change_dict = dict(results)
+    results_dict = {"num_neighbors": list(range(1, len(aa_changes) + 1))}
+    results_dict.update(rank_change_dict)
+    pd.DataFrame(results_dict).to_csv("shared_neighbors.csv", index=False)
+
+
+def var_v_neighborhood_size(
+    rank_matrix_path: PathLike, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    variances = np.std(data_matrix, axis=1)
+    means = np.mean(data_matrix, axis=1)
+    adjusted_dist = variances / means
+
+    fig, ax = plt.subplots()
+
+    ax.plot(num_neighbors, adjusted_dist)
+    ax.set_ylim(bottom=0)
+
+    max_idx = np.argmax(adjusted_dist)
+    ax.axvline(
+        num_neighbors[max_idx], color="red", linestyle="-", label=f"max idx = {max_idx}"
+    )
+    ax.legend()
+
+    ax.set_ylabel("STD / Mean")
+    ax.set_xlabel("Neighborhood Size")
+    ax.set_title(
+        "Neighborhood Size vs. Adjusted Standard Deviation of Shared Neighbors"
+    )
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def plot_mean_proportion_shared_neighbors(
+    rank_matrix_path: PathLike, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    data_matrix = data_matrix / num_neighbors[:, np.newaxis]
+    adjusted_variances = np.std(data_matrix, axis=1)
+    adjusted_means = np.mean(data_matrix, axis=1)
+    max_var_idx = num_neighbors[np.argmax(adjusted_variances)]
+
+    fig, ax = plt.subplots()
+
+    ax.plot(num_neighbors, adjusted_means, color="blue", label="mean shared proportion")
+    ax.plot(
+        num_neighbors,
+        adjusted_means + adjusted_variances,
+        color="black",
+        linestyle="--",
+        label="+1 std",
+    )
+    ax.plot(
+        num_neighbors,
+        adjusted_means - adjusted_variances,
+        color="black",
+        linestyle="--",
+        label="-1 std",
+    )
+    ax.axvline(max_var_idx, color="red", label=f"max std idx = {max_var_idx}")
+
+    ax.set_title("Mean Proportion of Neighbors that are Shared")
+    ax.set_xlabel("Neighborhood Size")
+    ax.set_ylabel("Proportion Shared Neighbors")
+    ax.legend()
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def plot_mean_shared_neighbors(
+    rank_matrix_path: PathLike, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    variances = np.std(data_matrix, axis=1)
+    means = np.mean(data_matrix, axis=1)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(num_neighbors, means, color="blue", label="mean shared neighbors")
+    ax.plot(
+        num_neighbors,
+        means + variances,
+        color="black",
+        linestyle="--",
+        label="+1 std",
+    )
+    ax.plot(
+        num_neighbors,
+        means - variances,
+        color="black",
+        linestyle="--",
+        label="-1 std",
+    )
+    ax.plot(
+        np.linspace(0, num_neighbors.max(), 100),
+        np.linspace(0, num_neighbors.max(), 100),
+        color="grey",
+        linestyle="--",
+        label="y = x",
+    )
+
+    ax.set_title("Mean Shared Neigbors")
+    ax.set_xlabel("Neighborhood Size")
+    ax.set_ylabel("Number Shared Neighbors")
+    ax.legend()
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def plot_median_proportion_shared_neighbors(
+    rank_matrix_path: PathLike, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    data_matrix = data_matrix / num_neighbors[:, np.newaxis]
+    adjusted_upper_quantile = np.quantile(data_matrix, 0.75, axis=1)
+    adjusted_lower_quantile = np.quantile(data_matrix, 0.25, axis=1)
+    diff = adjusted_upper_quantile - adjusted_lower_quantile
+    adjusted_median = np.median(data_matrix, axis=1)
+    max_var_idx = num_neighbors[np.argmax(diff)]
+
+    fig, ax = plt.subplots()
+
+    ax.plot(
+        num_neighbors, adjusted_median, color="blue", label="median shared proportion"
+    )
+    ax.plot(
+        num_neighbors,
+        adjusted_upper_quantile,
+        color="black",
+        linestyle="--",
+        label="upper quantile",
+    )
+    ax.plot(
+        num_neighbors,
+        adjusted_lower_quantile,
+        color="black",
+        linestyle="--",
+        label="lower quantile",
+    )
+    ax.axvline(
+        max_var_idx,
+        color="red",
+        label=f"max quantile diff idx = {max_var_idx}",
+    )
+
+    ax.set_title("Median Proportion of Neighbors that are Shared")
+    ax.set_xlabel("Neighborhood Size")
+    ax.set_ylabel("Proportion Shared Neighbors")
+    ax.legend()
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def plot_median_shared_neighbors(
+    rank_matrix_path: PathLike, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    upper_quantile = np.quantile(data_matrix, 0.75, axis=1)
+    lower_quantile = np.quantile(data_matrix, 0.25, axis=1)
+    adjusted_median = np.median(data_matrix, axis=1)
+
+    fig, ax = plt.subplots()
+
+    ax.plot(
+        num_neighbors, adjusted_median, color="blue", label="median shared neighbors"
+    )
+    ax.plot(
+        num_neighbors,
+        upper_quantile,
+        color="black",
+        linestyle="--",
+        label="upper quantile",
+    )
+    ax.plot(
+        num_neighbors,
+        lower_quantile,
+        color="black",
+        linestyle="--",
+        label="lower quantile",
+    )
+    ax.plot(
+        np.linspace(0, num_neighbors.max(), 100),
+        np.linspace(0, num_neighbors.max(), 100),
+        color="grey",
+        linestyle="--",
+        label="y = x",
+    )
+
+    ax.set_title("Median Shared Neighbors")
+    ax.set_xlabel("Neighborhood Size")
+    ax.set_ylabel("Nuber of Shared Neighbors")
+    ax.legend()
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def graph_num_shared_neighbors(
+    rank_matrix_path: PathLike, row: int, img_save_path: PathLike = None
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy()
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+
+    fig = plt.figure(figsize=(8, 6))
+    ax_hist = fig.add_axes([0.1, 0.3, 0.8, 0.65])
+    ax_slider = fig.add_axes([0.1, 0.1, 0.8, 0.05])
+
+    n_size_slider = matplotlib.widgets.Slider(
+        ax=ax_slider,
+        label="Neighborhood Size",
+        valinit=row,
+        valmin=num_neighbors.min(),
+        valmax=num_neighbors.max(),
+    )
+
+    def update(val: float) -> None:
+        ax_hist.clear()
+        data_row = data_matrix[int(val)]
+        sns.histplot(x=data_row, discrete=True, ax=ax_hist, kde=True)
+        ax_hist.set_xlabel("Num Shared Neighbors")
+        ax_hist.set_ylabel("Frequency")
+        ax_hist.set_title(f"Distribution of Shared Neighbors (n = {int(val)})")
+        fig.canvas.draw_idle()
+
+    update(row)
+    n_size_slider.on_changed(update)
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def int_shared_neighbor(
+    rank_matrix_path: PathLike,
+    img_save_path: PathLike = None,
+    auc_save_path: PathLike = None,
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy().reshape((-1, 1))
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=int)
+    int_neighbors = np.trapz(y=data_matrix, x=num_neighbors, axis=0)
+    int_neighbors = (2 * int_neighbors) / (data_matrix.shape[1] ** 2)
+
+    fig, ax = plt.subplots()
+    sns.histplot(x=int_neighbors, discrete=False, ax=ax)
+
+    if auc_save_path is not None:
+        pd.DataFrame(int_neighbors, index=data_df.columns).to_csv(auc_save_path)
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def plot_aggregated_proportion(
+    rank_matrix_path: PathLike,
+    img_save_path: PathLike = None,
+) -> None:
+    data_df = pd.read_csv(rank_matrix_path)
+    num_neighbors = data_df["num_neighbors"].to_numpy(dtype=float)
+    data_df.drop("num_neighbors", axis=1, inplace=True)
+    data_matrix = data_df.to_numpy(dtype=float)
+    num_neighbors = num_neighbors.reshape((-1, 1))
+    data_matrix /= num_neighbors
+    data_matrix = data_matrix.mean(axis=0)
+
+    fig, ax = plt.subplots()
+    sns.histplot(x=data_matrix, discrete=False, ax=ax)
+    ax.set_title("Distribution of Mean Shared Proportion")
+
+    if img_save_path is None:
+        plt.show()
+        plt.close(fig)
+    else:
+        fig.savefig(img_save_path)
+
+
+def run_all_neighbor_plots(
+    rank_matrix_path: PathLike,
+    output_dir: PathLike = None,
+) -> None:
+    """Run all neighbor analysis plots."""
+    rank_matrix_path = pathlib.Path(rank_matrix_path)
+
+    if output_dir is None:
+        save_paths = [None] * 6
+    else:
+        output_dir = pathlib.Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        save_paths = [
+            output_dir / "var_v_neighborhood_size.png",
+            output_dir / "mean_proportion_shared_neighbors.png",
+            output_dir / "mean_shared_neighbors.png",
+            output_dir / "median_proportion_shared_neighbors.png",
+            output_dir / "median_shared_neighbors.png",
+            output_dir / "agregated_proportion.png",
+        ]
+
+    var_v_neighborhood_size(rank_matrix_path, save_paths[0])
+    plot_mean_proportion_shared_neighbors(rank_matrix_path, save_paths[1])
+    plot_mean_shared_neighbors(rank_matrix_path, save_paths[2])
+    plot_median_proportion_shared_neighbors(rank_matrix_path, save_paths[3])
+    plot_median_shared_neighbors(rank_matrix_path, save_paths[4])
+    plot_aggregated_proportion(rank_matrix_path, save_paths[5])
+
+
+def aggregated_feature_clusters(
+    data_path: PathLike,
+    meta_data_path: PathLike,
+) -> None:
+    data_df = pd.read_parquet(data_path)
+    with open(meta_data_path) as f:
+        meta_data = json.load(f)
+
+    all_columns = meta_data["feature_columns"] + [meta_data["target_column"]]
+    data_df = data_df[all_columns]
+    data_df = data_df.groupby(meta_data["target_column"], as_index=False).median()
+    data_df = data_df[data_df[meta_data["target_column"]] != "WT"]
+    data_df = data_df[meta_data["feature_columns"]]
+    data_df = data_df.loc[:, data_df.nunique() > 1]
+    correlation_matrix = data_df.corr(method="spearman").to_numpy()
+    correlation_matrix = np.abs(correlation_matrix)
+
+    cluster_map = sns.clustermap(correlation_matrix, vmin=0, vmax=1)
+    cluster_map.figure.suptitle("Absolute Shap Correlation")
+    plt.show()
+
+     
 def main():
     fire.Fire()
 
