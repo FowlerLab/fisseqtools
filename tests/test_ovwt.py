@@ -17,7 +17,9 @@ from fisseqtools.ovwt import (
     ovwt_single_feature,
     ovwt_shap_only,
     ovwt_stratified,
+    ovwt_stratified_test,
     train_ovwt,
+    test_ovwt as _test_ovwt,
     train_xgboost,
     train_single_feature_xgboost,
     wtvwt_control,
@@ -172,6 +174,21 @@ def test_train_ovwt():
     metrics = metrics.drop("label", axis=1)
     assert np.all(metrics.to_numpy() == pytest.approx(1.0))
 
+    test_metrics = _test_ovwt(
+        models,
+        train_df,
+        eval_one_df,
+        {"target_column": "label", "feature_columns": ["index"]},
+        wt_key="A",
+    )
+
+    assert test_metrics.shape == (2, 5)
+    assert "B" in set(test_metrics["label"])
+    assert "C" in set(test_metrics["label"])
+
+    test_metrics = test_metrics.drop("label", axis=1)
+    assert np.all(test_metrics.to_numpy() == pytest.approx(1.0))
+
     models, metrics = train_ovwt(
         train_fun,
         train_df,
@@ -190,6 +207,21 @@ def test_train_ovwt():
 
     metrics = metrics.drop("label", axis=1)
     assert np.all(metrics.to_numpy() == pytest.approx(1.0))
+
+    test_metrics = _test_ovwt(
+        models,
+        train_df,
+        eval_one_df,
+        {"target_column": "label", "feature_columns": ["index"]},
+        wt_key="A",
+    )
+
+    assert test_metrics.shape == (2, 5)
+    assert "B" in set(test_metrics["label"])
+    assert "C" in set(test_metrics["label"])
+
+    test_metrics = test_metrics.drop("label", axis=1)
+    assert np.all(test_metrics.to_numpy() == pytest.approx(1.0))
 
 
 def test_get_shap_values():
@@ -398,6 +430,22 @@ def test_ovwt(tmp_path):
 
     assert pathlib.Path(output_dir / "train_results.csv").is_file()
     assert pathlib.Path(output_dir / "models.pkl").is_file()
+
+    models_path = output_dir / "models.pkl"
+    output_dir = tmp_path / "stratified-test"
+    output_dir.mkdir()
+
+    ovwt_stratified_test(
+        models_path=models_path,
+        train_data_path=str(input_dir / "train.parquet"),
+        eval_one_data_path=str(input_dir / "eval.parquet"),
+        meta_data_json_path=str(tmp_path / "meta_data.json"),
+        output_dir=str(output_dir),
+        stratify_column="replicate",
+        wt_key="A",
+    )
+
+    assert pathlib.Path(output_dir / "train_results.csv").is_file()
 
     output_dir = tmp_path / "wtvwt"
     output_dir.mkdir()

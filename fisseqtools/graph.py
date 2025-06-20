@@ -791,6 +791,7 @@ def get_sparcity(
 
     return feature_matrix
 
+
 def plot_example_sparcity(
     feature_data_path: PathLike,
     shap_data_path: PathLike,
@@ -800,7 +801,7 @@ def plot_example_sparcity(
     feature_sparcity = get_sparcity(feature_data_path, meta_data_path)
     shap_sparcity = get_sparcity(shap_data_path, meta_data_path)
     fig, ax = plt.subplots()
-    
+
     sns.histplot(
         x=feature_sparcity,
         discrete=True,
@@ -841,7 +842,7 @@ def plot_feature_sparcity(
     feature_sparcity = get_sparcity(feature_data_path, meta_data_path, axis=0)
     shap_sparcity = get_sparcity(shap_data_path, meta_data_path, axis=0)
     fig, ax = plt.subplots()
-    
+
     sns.histplot(
         x=feature_sparcity,
         discrete=True,
@@ -1296,7 +1297,7 @@ def aggregated_feature_clusters(
     cluster_map.figure.suptitle("Absolute Shap Correlation")
     plt.show()
 
-     
+
 def main():
     fire.Fire()
 
