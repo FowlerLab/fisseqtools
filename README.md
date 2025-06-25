@@ -33,7 +33,3 @@ python -m fisseqtools.<module> <function> <args>
 ```
 
 See the the [python-fire](https://github.com/google/python-fire) and code documentation of top level modules for more details.
-
-## Lab Notebook
-
-Lab Notebook: [https://lilferrit.github.io/fisseqtools/results/gstrau2/results.html](https://lilferrit.github.io/fisseqtools/results/gstrau2/results.html)
